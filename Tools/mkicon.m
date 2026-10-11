@@ -2,7 +2,7 @@
 //
 // A host tool: built for and run on the development machine, never shipped.
 // A 2013 Mac icon, an object rather than a tile, kept quiet on purpose
-// (muted leather, drawn at 84%): three books in the flag's colours, faded to
+// (muted leather): three books in the flag's colours, faded to
 // cream, dusty navy and brick, on a slim walnut wall shelf, the red one
 // leaning on the blue. Gilt bands on the spines and a gilt play mark tooled
 // into the blue one. Below 64 pixels the bands, grain and brackets go and
@@ -167,18 +167,11 @@ static void Draw(CGContextRef c, int pixels)
     CGContextScaleCTM(c, gPixelsPerUnit, gPixelsPerUnit);
     BOOL detail = pixels >= 64;
     BOOL tiny = pixels <= 32;
-    // Drawn at 84%, in muted leather: it should sit quietly in the Dock.
-    if (!tiny) {
-        CGContextTranslateCTM(c, 512, 512);
-        CGContextScaleCTM(c, 0.84, 0.84);
-        CGContextTranslateCTM(c, -512, -560);
-    }
-
     // The shelf: a slim floating plank, its top catching the light.
     // About three quarters of the canvas wide, with air all round.
-    CGFloat left = tiny ? 110 : 150, right = tiny ? 914 : 874;
+    CGFloat left = tiny ? 90 : 96, right = tiny ? 934 : 928;
     CGFloat front = tiny ? 70 : 44, topDepth = tiny ? 0 : 22;
-    CGFloat plankY = tiny ? 200 : 236;
+    CGFloat plankY = tiny ? 70 : 80;
     CGRect face = CGRectMake(left, plankY, right - left, front);
     CGContextSaveGState(c);
     Shadow(c, 14, 26, 0.45);
@@ -211,8 +204,8 @@ static void Draw(CGContextRef c, int pixels)
 
     // The books, of different widths and heights, centred on what's drawn.
     // The red one leans on the blue.
-    CGFloat wW = tiny ? 150 : 118, wB = tiny ? 170 : 136, wR = tiny ? 150 : 116;
-    CGFloat hW = tiny ? 560 : 440, hB = tiny ? 650 : 520, hR = tiny ? 560 : 450;
+    CGFloat wW = tiny ? 190 : 168, wB = tiny ? 210 : 194, wR = tiny ? 190 : 166;
+    CGFloat hW = tiny ? 700 : 690, hB = tiny ? 820 : 800, hR = tiny ? 700 : 700;
     CGFloat gap = tiny ? 16 : 10;
     CGFloat lean = tiny ? 0 : 12 * M_PI / 180;
     CGFloat total = wW + gap + wB + 2 + wR * cos(lean) + hR * sin(lean);
@@ -220,7 +213,7 @@ static void Draw(CGContextRef c, int pixels)
     Book(c, CGRectMake(x, floorY, wW, hW), 0xf1ead8, 0xddd3bb, 0xa89c80, detail);
     CGFloat bx = x + wW + gap;
     Book(c, CGRectMake(bx, floorY, wB, hB), 0x5d7299, 0x3b4f78, 0x1f2b45, detail);
-    CGFloat s = tiny ? 62 : 46;
+    CGFloat s = tiny ? 74 : 62;
     PlayMark(c, CGPointMake(bx + wB / 2 - 3, floorY + hB * 0.52), s, detail);
     // The red book stands on its bottom-left corner and leans left until its
     // top touches the blue one's side.
