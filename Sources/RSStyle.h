@@ -3,9 +3,12 @@
 // goes where and ask this for everything else, so a new look is a new
 // RSStyle.m.
 //
-// For now it's plain Mavericks AppKit: the system font, white rows with
-// hairlines, the system's blue for what's next. A skeuomorphic pass comes
-// later (Prompts/3-skeuomorphic-pass.md).
+// The look is 2013 skeuomorphic: a walnut bookcase. Each
+// video stands on its own plank beside a cream library card in Georgia; a
+// red silk ribbon marks the next one and a green ink stamp the finished ones.
+// The header is a brass nameplate, the player's keys are real keycaps, and
+// the transcript is ruled paper with a highlighter on the line being spoken.
+// The wood is drawn here, once, into tiles (no image files).
 
 #import <Cocoa/Cocoa.h>
 
@@ -43,7 +46,10 @@ typedef enum {
 + (void)drawHeaderIn:(NSRect)rect title:(NSString *)title subtitle:(NSString *)subtitle;
 + (void)drawRow:(RSRowModel *)row in:(NSRect)rect hover:(BOOL)hover pressed:(BOOL)pressed selected:(BOOL)selected;
 + (void)drawEmptyShelfIn:(NSRect)rect title:(NSString *)title message:(NSString *)message;
+// Bare shelves, rowHeight apart, for the space under the last video.
++ (void)drawBareShelvesIn:(NSRect)rect from:(CGFloat)top;
 + (void)drawStatusBarIn:(NSRect)rect text:(NSString *)text problem:(BOOL)problem;
++ (void)drawScrollerSlotIn:(NSRect)rect;        // the shelf's scroller track, in the wood
 // The text a row shows under the title: "Sergey Storyteller · 11:30".
 + (NSString *)metaTextFor:(RSRowModel *)row;
 + (NSString *)progressTextFor:(RSRowModel *)row;

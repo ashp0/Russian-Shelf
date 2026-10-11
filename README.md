@@ -4,6 +4,13 @@ A shelf of about twelve Russian videos for the week, chosen by Claude, on the
 Mac Pro (OS X 10.9). Click one and it plays in a plain window, with Russian
 subtitles kept out of sight until you ask for a line.
 
+It looks like a 2013 Mac app: a walnut bookcase with a brass nameplate, each
+video standing on its own shelf beside a cream library card, a red silk
+ribbon on the one to watch next and a green ПРОСМОТРЕНО stamp on the ones
+you've finished. The transcript is ruled paper with a highlighter on the line
+being spoken. Everything is drawn in `Sources/RSStyle.m` (the wood too), and
+the icon, a small bookcase of white, blue and red books, in `Tools/mkicon.m`.
+
 There is nothing else to do in it: no browsing, no search, no URL field, no
 File > Open, no dragging a file in, no recommendations, no "up next". Claude
 writes the week's list on the MacBook, seals it, and the app shows it.

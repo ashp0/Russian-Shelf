@@ -140,7 +140,9 @@ static NSString *RSTimeText(time_t t)
         NSRect b = [content bounds];
         CGFloat bar = [RSStyle statusBarHeight];
         NSScrollView *scroll = [[[NSScrollView alloc] initWithFrame:NSMakeRect(0, bar, NSWidth(b), NSHeight(b) - bar)] autorelease];
+        [scroll setVerticalScroller:[[[RSScroller alloc] initWithFrame:NSMakeRect(0, 0, 15, 100)] autorelease]];
         [scroll setHasVerticalScroller:YES];
+        [scroll setAutohidesScrollers:YES];
         [scroll setBorderType:NSNoBorder];
         [scroll setDrawsBackground:YES];
         [scroll setBackgroundColor:[RSStyle windowBackground]];

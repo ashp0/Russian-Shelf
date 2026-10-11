@@ -87,8 +87,6 @@
 - (void)drawRect:(NSRect)dirty
 {
     NSRect b = [self bounds];
-    [[RSStyle windowBackground] set];
-    NSRectFill(dirty);
     NSRect header = NSMakeRect(0, 0, NSWidth(b), [RSStyle headerHeight]);
     if ([_rows count] == 0) {
         [RSStyle drawEmptyShelfIn:b title:_emptyTitle ?: @"" message:_emptyMessage ?: @""];
@@ -100,6 +98,9 @@
         if (!NSIntersectsRect(r, dirty)) continue;
         [RSStyle drawRow:[_rows objectAtIndex:i] in:r hover:i == _hover pressed:i == _pressed selected:i == _selected];
     }
+    // Under the last video, the bookcase carries on with empty shelves.
+    CGFloat end = NSMaxY([self rectOfRow:(NSInteger)[_rows count] - 1]);
+    if (NSMaxY(dirty) > end) [RSStyle drawBareShelvesIn:NSMakeRect(0, end, NSWidth(b), NSMaxY(b) - end) from:end];
 }
 
 // ---- Mouse ------------------------------------------------------------------
@@ -216,6 +217,21 @@
 - (void)drawRect:(NSRect)dirty
 {
     [RSStyle drawStatusBarIn:[self bounds] text:_text problem:_problem];
+}
+
+@end
+
+@implementation RSScroller
+
+- (id)initWithFrame:(NSRect)frame
+{
+    if ((self = [super initWithFrame:frame])) [self setKnobStyle:NSScrollerKnobStyleLight];
+    return self;
+}
+
+- (void)drawKnobSlotInRect:(NSRect)slotRect highlight:(BOOL)flag
+{
+    [RSStyle drawScrollerSlotIn:slotRect];
 }
 
 @end

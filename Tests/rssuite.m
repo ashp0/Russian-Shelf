@@ -696,10 +696,10 @@ static void TestRealGit(void)
     NSString *base = Temp(@"git");
     NSString *g = [NSString stringWithFormat:@"'%@' -c user.name=t -c user.email=t@example.com", git];
     CHECK(Run(Temp(@""), [NSString stringWithFormat:
-        @"rm -rf git && mkdir -p git && cd git && %@ init -q --bare -b main origin.git && %@ clone -q origin.git mac && cd mac && "
+        @"rm -rf git && mkdir -p git && cd git && %@ init -q --bare origin.git && %@ --git-dir=origin.git symbolic-ref HEAD refs/heads/main && %@ clone -q origin.git mac && cd mac && "
         @"git checkout -q -b main 2>/dev/null; mkdir -p Russian Inbox Calendar && echo sealed > Russian/shelf.signed && "
         @"echo '# notes' > Inbox/keep.txt && %@ add -A && %@ commit -q -m one && %@ push -q origin HEAD:main && "
-        @"cd .. && %@ clone -q origin.git macpro", g, g, g, g, g, g]), "set up repositories");
+        @"cd .. && %@ clone -q origin.git macpro", g, g, g, g, g, g, g]), "set up repositories");
     NSString *mac = [base stringByAppendingPathComponent:@"mac"];
     NSString *macpro = [base stringByAppendingPathComponent:@"macpro"];
     CHECK([RSSync isRepository:macpro] && ![RSSync isRepository:base], "repository detection");

@@ -31,3 +31,8 @@
 @property (nonatomic, copy) NSString *text;
 @property (nonatomic) BOOL problem;
 @end
+
+// The shelf's scroller: a light knob in a slot cut into the wood, where a
+// legacy (always-shown) scroller would otherwise put a white track.
+@interface RSScroller : NSScroller
+@end
