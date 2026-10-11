@@ -1,12 +1,12 @@
 // mkicon -- writes RussianShelf.iconset: the app's icon, drawn at every size.
 //
 // A host tool: built for and run on the development machine, never shipped.
-// A 2013 Mac icon, an object rather than a tile: a small walnut bookcase,
-// seen from the front, with three leather-bound books standing in it in the
-// flag's white, blue and red. Gilt bands on the spines, and a gilt play mark
-// tooled into the blue one. Below 64 pixels the bands, the grain and the
-// bevels go, and the books grow to fill the case, so 16 and 32 still read
-// as three coloured spines in a box.
+// A 2013 Mac icon, an object rather than a tile: three leather-bound books
+// in the flag's white, blue and red on a slim walnut wall shelf, the red one
+// leaning on the blue. Gilt bands on the spines and a gilt play mark tooled
+// into the blue one. Below 64 pixels the bands, grain and brackets go and
+// the books stand straight and wider, so 16 and 32 still read as three
+// coloured spines on a shelf.
 //
 //   mkicon <output.iconset>      then: iconutil -c icns <output.iconset>
 
@@ -167,82 +167,62 @@ static void Draw(CGContextRef c, int pixels)
     BOOL detail = pixels >= 64;
     BOOL tiny = pixels <= 32;
 
-    // The case: about 88% of the canvas, its shadow inside it.
-    CGRect box = CGRectMake(92, 96, 840, 820);
-    CGFloat side = tiny ? 96 : 70, top = tiny ? 96 : 74, base = tiny ? 120 : 112;
+    // The shelf: a slim floating plank, its top catching the light.
+    // About three quarters of the canvas wide, with air all round.
+    CGFloat left = tiny ? 110 : 150, right = tiny ? 914 : 874;
+    CGFloat front = tiny ? 70 : 44, topDepth = tiny ? 0 : 22;
+    CGFloat plankY = tiny ? 200 : 236;
+    CGRect face = CGRectMake(left, plankY, right - left, front);
     CGContextSaveGState(c);
-    Shadow(c, 18, 36, 0.5);
-    SetFill(c, 0x6a3f20, 1);
-    RoundRect(c, box, 34);
+    Shadow(c, 14, 26, 0.45);
+    SetFill(c, 0x8a5530, 1);
+    RoundRect(c, CGRectMake(left, plankY, right - left, front + topDepth), tiny ? 6 : 8);
     CGContextFillPath(c);
     CGContextRestoreGState(c);
-
+    // The front edge.
     CGContextSaveGState(c);
-    RoundRect(c, box, 34);
+    RoundRect(c, face, tiny ? 6 : 8);
     CGContextClip(c);
-    unsigned wood[4] = { 0x5e3519, 0x8a5530, 0xa66d3f, 0x7a4723 };
-    CGFloat wl[4] = { 0, 0.35, 0.8, 1 };
-    Gradient(c, wood, wl, 4, CGPointMake(0, CGRectGetMinY(box)), CGPointMake(0, CGRectGetMaxY(box)));
-    if (detail) Grain(c, box, 0x3a1e0c, 0.35, 7);
+    unsigned edge[3] = { 0x5e3519, 0x8f5a32, 0xa86f42 };
+    CGFloat el[3] = { 0, 0.6, 1 };
+    Gradient(c, edge, el, 3, CGPointMake(0, CGRectGetMinY(face)), CGPointMake(0, CGRectGetMaxY(face)));
+    if (detail) Grain(c, face, 0x3a1e0c, 0.35, 5);
     CGContextRestoreGState(c);
-
-    // The bevel: light along the top edge, dark along the bottom.
-    if (detail) {
-        SetStroke(c, 0xffe0b0, 0.45, 5);
-        CGContextMoveToPoint(c, CGRectGetMinX(box) + 34, CGRectGetMaxY(box) - 3);
-        CGContextAddLineToPoint(c, CGRectGetMaxX(box) - 34, CGRectGetMaxY(box) - 3);
+    // The top, seen a little from above.
+    CGFloat floorY = CGRectGetMaxY(face) + topDepth * 0.55;
+    if (!tiny) {
+        CGContextSaveGState(c);
+        CGRect top = CGRectMake(left + 6, CGRectGetMaxY(face), right - left - 12, topDepth);
+        CGContextClipToRect(c, top);
+        Vertical(c, top, 0xa36a3d, 0xc58b58);
+        CGContextRestoreGState(c);
+        SetStroke(c, 0xf2c99a, 0.7, 3);
+        CGContextMoveToPoint(c, left + 8, CGRectGetMaxY(face) + 1);
+        CGContextAddLineToPoint(c, right - 8, CGRectGetMaxY(face) + 1);
         CGContextStrokePath(c);
     }
-    SetStroke(c, 0x2a1408, 0.9, tiny ? 18 : 4);
-    RoundRect(c, CGRectInset(box, tiny ? 9 : 2, tiny ? 9 : 2), tiny ? 26 : 32);
-    CGContextStrokePath(c);
 
-    // The opening: the dark back, in shadow from the top and the left side.
-    CGRect hole = CGRectMake(CGRectGetMinX(box) + side, CGRectGetMinY(box) + base,
-                             box.size.width - 2 * side, box.size.height - base - top);
+    // The books, of different widths and heights, centred on what's drawn.
+    // The red one leans on the blue.
+    CGFloat wW = tiny ? 150 : 118, wB = tiny ? 170 : 136, wR = tiny ? 150 : 116;
+    CGFloat hW = tiny ? 560 : 440, hB = tiny ? 650 : 520, hR = tiny ? 560 : 450;
+    CGFloat gap = tiny ? 16 : 10;
+    CGFloat lean = tiny ? 0 : 12 * M_PI / 180;
+    CGFloat total = wW + gap + wB + 2 + wR * cos(lean) + hR * sin(lean);
+    CGFloat x = (left + right) / 2 - total / 2;
+    Book(c, CGRectMake(x, floorY, wW, hW), 0xffffff, 0xe9e4d8, 0xb3ab98, detail);
+    CGFloat bx = x + wW + gap;
+    Book(c, CGRectMake(bx, floorY, wB, hB), 0x4a7ad8, 0x1f4fb4, 0x0f2a6a, detail);
+    CGFloat s = tiny ? 62 : 46;
+    PlayMark(c, CGPointMake(bx + wB / 2 - 3, floorY + hB * 0.52), s, detail);
+    // The red book stands on its bottom-left corner and leans left until its
+    // top touches the blue one's side.
+    CGFloat px = tiny ? bx + wB + gap : bx + wB + 2 + hR * sin(lean);
     CGContextSaveGState(c);
-    RoundRect(c, hole, tiny ? 8 : 12);
-    CGContextClip(c);
-    Vertical(c, hole, 0x24130a, 0x40260f);
-    if (detail) Grain(c, hole, 0x1a0c04, 0.4, 3);
-    // The case's own shadow inside: the top board and the left side.
-    {
-        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-        CGFloat comps[8] = { 0, 0, 0, 0.55, 0, 0, 0, 0 }, loc[2] = { 0, 1 };
-        CGGradientRef g = CGGradientCreateWithColorComponents(cs, comps, loc, 2);
-        CGContextDrawLinearGradient(c, g, CGPointMake(0, CGRectGetMaxY(hole)), CGPointMake(0, CGRectGetMaxY(hole) - 90), 0);
-        comps[3] = 0.3;
-        CGGradientRelease(g);
-        g = CGGradientCreateWithColorComponents(cs, comps, loc, 2);
-        CGContextDrawLinearGradient(c, g, CGPointMake(CGRectGetMinX(hole), 0), CGPointMake(CGRectGetMinX(hole) + 70, 0), 0);
-        CGGradientRelease(g);
-        CGColorSpaceRelease(cs);
-    }
+    CGContextTranslateCTM(c, px, floorY);
+    CGContextRotateCTM(c, lean);
+    Book(c, CGRectMake(0, 0, wR, hR), 0xf0524e, 0xc8242a, 0x6e1014, detail);
     CGContextRestoreGState(c);
-    if (detail) {
-        // The inner edges catch the light: the floor's lip and the right side.
-        SetStroke(c, 0xd99a62, 0.8, 4);
-        CGContextMoveToPoint(c, CGRectGetMinX(hole) + 6, CGRectGetMinY(hole) - 2);
-        CGContextAddLineToPoint(c, CGRectGetMaxX(hole) - 6, CGRectGetMinY(hole) - 2);
-        CGContextStrokePath(c);
-        SetStroke(c, 0x1a0c04, 0.9, 4);
-        RoundRect(c, CGRectInset(hole, -2, -2), 14);
-        CGContextStrokePath(c);
-    }
-
-    // The books, standing on the floor of the opening, centred on what's drawn.
-    CGFloat floorY = CGRectGetMinY(hole);
-    CGFloat w = tiny ? 166 : 168, gap = tiny ? 20 : 26;
-    CGFloat total = 3 * w + 2 * gap, x = CGRectGetMidX(hole) - total / 2;
-    CGFloat room = hole.size.height;
-    CGFloat heights[3] = { room - (tiny ? 70 : 100), room - (tiny ? 34 : 46), room - (tiny ? 90 : 128) };
-    Book(c, CGRectMake(x, floorY, w, heights[0]), 0xffffff, 0xe9e4d8, 0xb3ab98, detail);
-    Book(c, CGRectMake(x + w + gap, floorY, w, heights[1]), 0x4a7ad8, 0x1f4fb4, 0x0f2a6a, detail);
-    Book(c, CGRectMake(x + 2 * (w + gap), floorY, w, heights[2]), 0xf0524e, 0xc8242a, 0x6e1014, detail);
-
-    // The play mark, tooled into the blue spine between its bands.
-    CGFloat s = tiny ? 62 : 58;
-    PlayMark(c, CGPointMake(x + w + gap + w / 2 - (tiny ? 6 : 4), floorY + heights[1] / 2 - 4), s, detail);
 }
 
 int main(int argc, const char *argv[])
