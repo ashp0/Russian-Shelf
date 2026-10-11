@@ -15,10 +15,15 @@ media-subscriptions-prefpane. Never push it anywhere public.
 - **MacBook** (macOS 27, Xcode): builds. `make dist` runs verify (107 bundled binaries
   checked against the 10.9 SDK), analyze, ~248 unit checks and 11 TLS checks, then
   writes `Russian Shelf.zip`.
-- **Mac Pro** (10.9.5): runs it. It cannot build this tree. Its git is ≤ 1.9 (Command
-  Line Tools for 10.9): no post-1.9 git syntax anywhere that runs there (the
-  `update-index --cacheinfo mode,sha,path` form broke report pushes once). If you are
-  Claude on the Mac Pro: install, run `--selftest`, read `Logs/report.log`, report back.
+- **Mac Pro** (10.9.5): runs it. Its git is ≤ 1.9 (Command Line Tools for 10.9): no
+  post-1.9 git syntax anywhere that runs there, tests included (the
+  `update-index --cacheinfo mode,sha,path` form broke report pushes once; `git init -b`
+  broke the suite). If you are Claude on the Mac Pro: install, run `--selftest`, read
+  `Logs/report.log`, report back.
+- The Mac Pro *can* build the app, the tests, the shots and the icon with its own
+  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (249/249 on 2026-10-10),
+  `make SDK=/ shots`, `make SDK=/ icon`. Not `dist` (verify needs `dyld_info`), so
+  `Russian Shelf.zip` is still rebuilt on the MacBook.
 
 ## Rules
 
@@ -49,6 +54,9 @@ media-subscriptions-prefpane. Never push it anywhere public.
 - The layer-backed caption overlay over AVPlayerView; inline controls.
 - 2026-10-10 fixes (git-1.9 report push; full screen via F / double-click / title bar,
   Esc leaves) are in the zip but the Mac Pro may still have the old app.
+- The skeuomorphic pass (2026-10-10, `RSStyle.m`, new icon) was built and installed
+  on the Mac Pro from source, and its self-test passed; `Russian Shelf.zip` predates it
+  until the next `make dist` on the MacBook.
 
 ## Working with the user
 
