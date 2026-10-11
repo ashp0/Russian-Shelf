@@ -1,8 +1,9 @@
 // mkicon -- writes RussianShelf.iconset: the app's icon, drawn at every size.
 //
 // A host tool: built for and run on the development machine, never shipped.
-// A 2013 Mac icon, an object rather than a tile: three leather-bound books
-// in the flag's white, blue and red on a slim walnut wall shelf, the red one
+// A 2013 Mac icon, an object rather than a tile, kept quiet on purpose
+// (muted leather, drawn at 84%): three books in the flag's colours, faded to
+// cream, dusty navy and brick, on a slim walnut wall shelf, the red one
 // leaning on the blue. Gilt bands on the spines and a gilt play mark tooled
 // into the blue one. Below 64 pixels the bands, grain and brackets go and
 // the books stand straight and wider, so 16 and 32 still read as three
@@ -114,7 +115,7 @@ static void Book(CGContextRef c, CGRect r, unsigned light, unsigned mid, unsigne
             CGContextClipToRect(c, band);
             Gradient(c, b, bl, 3, CGPointMake(0, CGRectGetMinY(band)), CGPointMake(0, CGRectGetMaxY(band)));
             CGContextRestoreGState(c);
-            unsigned gilt[3] = { 0x8a6420, 0xf7dd8a, 0xa87a2a };
+            unsigned gilt[3] = { 0x7a6038, 0xd9c48e, 0x957545 };
             CGFloat gl[3] = { 0, 0.5, 1 };
             for (int k = 0; k < 2; k++) {
                 CGRect line = CGRectMake(CGRectGetMinX(r), k ? CGRectGetMaxY(band) + 7 : CGRectGetMinY(band) - 13, r.size.width, 6);
@@ -150,11 +151,11 @@ static void PlayMark(CGContextRef c, CGPoint centre, CGFloat s, BOOL detail)
         CGContextAddLineToPoint(c, centre.x - s * 0.55, centre.y + s);
         CGContextClosePath(c);
         CGContextClip(c);
-        unsigned gilt[3] = { 0x9a7024, 0xfbe7a0, 0xc19234 };
+        unsigned gilt[3] = { 0x8a6c3c, 0xe2cf98, 0xa8874e };
         CGFloat gl[3] = { 0, 0.55, 1 };
         Gradient(c, gilt, gl, 3, CGPointMake(0, centre.y - s), CGPointMake(0, centre.y + s));
     } else {
-        SetFill(c, 0xf2d27a, 1);
+        SetFill(c, 0xd9c48e, 1);
         CGContextFillPath(c);
     }
     CGContextRestoreGState(c);
@@ -166,6 +167,12 @@ static void Draw(CGContextRef c, int pixels)
     CGContextScaleCTM(c, gPixelsPerUnit, gPixelsPerUnit);
     BOOL detail = pixels >= 64;
     BOOL tiny = pixels <= 32;
+    // Drawn at 84%, in muted leather: it should sit quietly in the Dock.
+    if (!tiny) {
+        CGContextTranslateCTM(c, 512, 512);
+        CGContextScaleCTM(c, 0.84, 0.84);
+        CGContextTranslateCTM(c, -512, -560);
+    }
 
     // The shelf: a slim floating plank, its top catching the light.
     // About three quarters of the canvas wide, with air all round.
@@ -210,9 +217,9 @@ static void Draw(CGContextRef c, int pixels)
     CGFloat lean = tiny ? 0 : 12 * M_PI / 180;
     CGFloat total = wW + gap + wB + 2 + wR * cos(lean) + hR * sin(lean);
     CGFloat x = (left + right) / 2 - total / 2;
-    Book(c, CGRectMake(x, floorY, wW, hW), 0xffffff, 0xe9e4d8, 0xb3ab98, detail);
+    Book(c, CGRectMake(x, floorY, wW, hW), 0xf1ead8, 0xddd3bb, 0xa89c80, detail);
     CGFloat bx = x + wW + gap;
-    Book(c, CGRectMake(bx, floorY, wB, hB), 0x4a7ad8, 0x1f4fb4, 0x0f2a6a, detail);
+    Book(c, CGRectMake(bx, floorY, wB, hB), 0x5d7299, 0x3b4f78, 0x1f2b45, detail);
     CGFloat s = tiny ? 62 : 46;
     PlayMark(c, CGPointMake(bx + wB / 2 - 3, floorY + hB * 0.52), s, detail);
     // The red book stands on its bottom-left corner and leans left until its
@@ -221,7 +228,7 @@ static void Draw(CGContextRef c, int pixels)
     CGContextSaveGState(c);
     CGContextTranslateCTM(c, px, floorY);
     CGContextRotateCTM(c, lean);
-    Book(c, CGRectMake(0, 0, wR, hR), 0xf0524e, 0xc8242a, 0x6e1014, detail);
+    Book(c, CGRectMake(0, 0, wR, hR), 0xb5584e, 0x8f3a32, 0x4f1d19, detail);
     CGContextRestoreGState(c);
 }
 
