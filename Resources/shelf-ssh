@@ -1,0 +1,7 @@
+#!/bin/sh
+# git runs this instead of ssh when Russian Shelf pulls or sends a report
+# (GIT_SSH): the system's own ssh, told never to stop and ask for anything,
+# so it can't hang on a prompt nobody can see. ~/.ssh/config still applies.
+# The same as Syllabus's syllabus-ssh.
+exec /usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=20 \
+    -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "$@"

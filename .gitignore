@@ -1,0 +1,9 @@
+# Everything here is produced by `make` from something that is tracked.
+build/
+
+# macOS
+.DS_Store
+
+# "Russian Shelf.zip" is deliberately NOT ignored, as in the other Mavericks
+# projects: the Mac Pro cannot build this tree. Rebuild it with `make dist`.
+# This project stays private (see README): don't push it anywhere public.
