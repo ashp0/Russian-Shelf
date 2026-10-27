@@ -16,7 +16,7 @@ media-subscriptions-prefpane. Never push it anywhere public.
 ## Two machines
 
 - **MacBook** (macOS 27, Xcode): builds. `make dist` runs verify (107 bundled binaries
-  checked against the 10.9 SDK), analyze, ~305 unit checks and 11 TLS checks, then
+  checked against the 10.9 SDK), analyze, ~308 unit checks and 11 TLS checks, then
   writes `Russian Shelf.zip`.
 - **Mac Pro** (10.9.5): runs it. Its git is ≤ 1.9 (Command Line Tools for 10.9): no
   post-1.9 git syntax anywhere that runs there, tests included (the
@@ -24,7 +24,7 @@ media-subscriptions-prefpane. Never push it anywhere public.
   broke the suite). If you are Claude on the Mac Pro: install, run `--selftest`, read
   `Logs/report.log`, report back.
 - The Mac Pro *can* build the app, the tests, the shots and the icon with its own
-  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (305/305 on 2026-10-27),
+  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (308/308 on 2026-10-27),
   `make SDK=/ shots`, `make SDK=/ icon`. Not `dist` (verify needs `dyld_info`), so
   `Russian Shelf.zip` is still rebuilt on the MacBook.
 
