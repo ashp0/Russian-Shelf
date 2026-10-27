@@ -264,7 +264,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     double _position, _furthest, _duration, _lastTime, _testingTime, _revealAt;
     NSUInteger _revealIndex, _loopIndex;
     float _rate;
-    CFAbsoluteTime _lastReport, _noteUntil, _userScrolledAt;
+    CFAbsoluteTime _lastReport, _noteUntil, _userScrolledAt, _loopSeekAt;
     BOOL _scrollingTranscript, _closed, _loopPaused, _observingRate;
 }
 @property (nonatomic, readwrite, copy) NSString *identifier;
@@ -728,6 +728,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     if (i == NSNotFound) { [self showNote:@"Nothing has been said yet." for:1.5]; return; }
     _loopIndex = i;
     _loopPaused = NO;
+    _loopSeekAt = CFAbsoluteTimeGetCurrent();
     [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:i] start] - 0.05)];
     [self play];
     [_delegate player:self helped:RSHelpHeardAgain];
@@ -750,8 +751,12 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 - (void)loopAt:(double)t
 {
     if (_loopIndex == NSNotFound || _loopPaused || ![self playing]) return;
+    // Just sent back to the line's start: the clock may not show it yet.
+    if (CFAbsoluteTimeGetCurrent() - _loopSeekAt < 0.5) return;
     RSLine *line = [[_subtitles lines] objectAtIndex:_loopIndex];
-    if (t < [line end] + 0.1 && t >= [line start] - 1) return;
+    // Moved away with the scrubber: the loop is over.
+    if (t < [line start] - 1 || t > [line end] + 2) { [self stopLoop]; return; }
+    if (t < [line end] + 0.1) return;
     [_player pause];
     _loopPaused = YES;
     double pause = MAX(RSLoopPauseAtLeast, ([line end] - [line start]) / _rate + 0.5);
@@ -762,6 +767,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 {
     if (_loopIndex == NSNotFound || _closed) return;
     _loopPaused = NO;
+    _loopSeekAt = CFAbsoluteTimeGetCurrent();
     [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:_loopIndex] start] - 0.05)];
     [self play];
 }

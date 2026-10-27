@@ -4,8 +4,11 @@ Native Objective-C app for the user's OS X 10.9.5 Mac Pro: plays a **sealed week
 shelf** of about 12 Russian videos that Claude chooses (Sergey Storyteller's TPRS
 stories are the spine). The list is encrypted and signed so the user can't edit it;
 that was their idea ("so I have no control over it so I don't doomscroll").
-Subtitles off by default, with reveal-line, replay-line, keep-on and a transcript.
-`README.md` is the full spec.
+Subtitles off by default, with reveal-line, replay-line, keep-on and a transcript;
+loop a line with a pause to say it back (L), ¾ speed (−), and keep a line with its sound
+(K) for a small spaced review in the Lines window (⌘L: 1, 3, 7, 16, 35, 75 days; ten kept
+and thirty heard a day at most). `README.md` is the full spec; the research behind the
+2026-10-27 changes is `~/dendron-autopilot/reports/r1-research.md` on the Mac Pro.
 
 This repo is **private**: downloading builds on Wowfunhappy's unlicensed
 media-subscriptions-prefpane. Never push it anywhere public.
@@ -13,7 +16,7 @@ media-subscriptions-prefpane. Never push it anywhere public.
 ## Two machines
 
 - **MacBook** (macOS 27, Xcode): builds. `make dist` runs verify (107 bundled binaries
-  checked against the 10.9 SDK), analyze, ~248 unit checks and 11 TLS checks, then
+  checked against the 10.9 SDK), analyze, ~305 unit checks and 11 TLS checks, then
   writes `Russian Shelf.zip`.
 - **Mac Pro** (10.9.5): runs it. Its git is ≤ 1.9 (Command Line Tools for 10.9): no
   post-1.9 git syntax anywhere that runs there, tests included (the
@@ -21,7 +24,7 @@ media-subscriptions-prefpane. Never push it anywhere public.
   broke the suite). If you are Claude on the Mac Pro: install, run `--selftest`, read
   `Logs/report.log`, report back.
 - The Mac Pro *can* build the app, the tests, the shots and the icon with its own
-  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (249/249 on 2026-10-10),
+  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (305/305 on 2026-10-27),
   `make SDK=/ shots`, `make SDK=/ icon`. Not `dist` (verify needs `dyld_info`), so
   `Russian Shelf.zip` is still rebuilt on the MacBook.
 
@@ -36,6 +39,11 @@ media-subscriptions-prefpane. Never push it anywhere public.
   story left unfinished 3 times.
 - Reports are pushed to `ashp0/Study` via private-index plumbing (add-only), so the
   Mac Pro's read-write deploy key never diverges the clone.
+- Each Mac that runs the app keeps its own State.plist and Lines/, and reports say
+  `from: <host>`: the skill must combine the newest report from each Mac (both the Mac
+  Pro and the other Mac have reported for the 2026-10-09 shelf).
+- The Help counts and Kept lines in reports are for Claude choosing the next shelf
+  (the level ladder in the skill); never show counts, scores or streaks in the app.
 
 ## Bundled tools (verified)
 
@@ -50,6 +58,10 @@ media-subscriptions-prefpane. Never push it anywhere public.
 
 ## Still untested on the real Mac Pro
 
+- 2026-10-27 (r1): L, −, K and the Lines window ran in tests and shots only. The sound
+  cut (AVAssetExportSession, Apple M4A) is tested on 10.9.5 with a WAV in `make test`
+  and on a real shelf video by `--selftest`; slower playback, the loop's pause and the
+  review's AVAudioPlayer rate haven't been heard by a person yet.
 - SecItemImport of the EC public key + SecVerifyTransform (selftest's first lines).
 - The layer-backed caption overlay over AVPlayerView; inline controls.
 - 2026-10-10 fixes (git-1.9 report push; full screen via F / double-click / title bar,

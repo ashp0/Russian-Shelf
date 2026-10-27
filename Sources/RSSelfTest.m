@@ -9,6 +9,7 @@
 
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
+#import "RSClip.h"
 #import <CoreMedia/CoreMedia.h>
 
 static int passed = 0, failed = 0;
@@ -212,6 +213,15 @@ static void TestLibrary(void)
          [NSString stringWithFormat:@"AVFoundation can play %@", sample],
          [NSString stringWithFormat:@"%@, %@", codec, [library subtitlesPath:sample] && [[library infoFor:sample] objectForKey:@"subtitles"]
                                                     ? [NSString stringWithFormat:@"subtitles %@", [[library infoFor:sample] objectForKey:@"subtitles"]] : @""]);
+
+    // What K does: two seconds of its sound cut into a file of their own.
+    NSString *clip = [NSTemporaryDirectory() stringByAppendingPathComponent:@"russian-shelf-selftest-line.m4a"];
+    NSString *problem = nil;
+    BOOL cut = RSCutClipNow([library moviePath:sample], 10, 12, clip, &problem);
+    double length = RSMediaDuration(clip);
+    Line(cut && length > 2 && length < 3, @"a line's sound can be cut from it, for Lines to Hear Again",
+         cut ? [NSString stringWithFormat:@"%.1f seconds", length] : problem);
+    [[NSFileManager defaultManager] removeItemAtPath:clip error:NULL];
 }
 
 int RSSelfTestRun(void)

@@ -13,7 +13,9 @@ the icon, a small bookcase of white, blue and red books, in `Tools/mkicon.m`.
 
 There is nothing else to do in it: no browsing, no search, no URL field, no
 File > Open, no dragging a file in, no recommendations, no "up next". Claude
-writes the week's list on the MacBook, seals it, and the app shows it.
+writes the week's list on the MacBook, seals it, and the app shows it. The
+one other window holds the few lines you kept from those videos, to hear
+again on later days.
 
 The spine is [Sergey Storyteller](https://www.youtube.com/@SergeyStoryteller):
 stories in easy Russian, made for learners. When his stories run short,
@@ -59,10 +61,51 @@ Click a video (or select it with ↑ ↓ and press Return) to play it.
 | S | Subtitles stay on (and off again) |
 | T | The transcript: every line, the one being spoken marked. Click a line to go there |
 | F | Full screen (or double-click the picture). Esc leaves it |
+| L | **Loop this line.** It plays, then waits as long as it took (at least a second and a half) for you to say it back, then plays again. ↓ shows it for the whole loop. L, Space or an arrow stops |
+| − | **Slower:** three-quarter speed, the voice's pitch kept. Again for full speed |
+| K | **Keep this line**, with its sound, to hear again tomorrow and on later days (below) |
 
 Subtitles are off when a video opens. Each video remembers where you left it.
 A video counts as finished at 90%, and skipping ahead with the scrubber
 doesn't count towards that.
+
+### A line you missed
+
+The keys follow what the research says trains the ear for fast speech
+(`dendron-autopilot/reports/r1-research.md`): hear the line again (↑) a
+time or two and try to say what it was; then show it (↓) and compare; slow
+it down (−) only after a try at full speed, and go back to full speed;
+loop it (L) and say it along in the pause. Keep (K) the few worth knowing.
+
+### Lines to hear again
+
+**Shelf > Lines to Hear Again** (⌘L) shows today's kept lines on an index
+card, one at a time. When there are some, the shelf's nameplate says how
+many.
+
+| Key | |
+| --- | --- |
+| Space | Hear it again (it plays by itself when it comes up) |
+| − | Three-quarter speed, and full speed again |
+| ↓ | Show the line, and the one before it for context |
+| ← | **Not yet.** Back tomorrow, from the start, and once more before today's are done |
+| → | **Knew it.** Back later |
+| ⌫ | Put it away for good |
+| Esc | Close |
+
+Sound first, so it's the ear that's tested, not reading. A line kept today
+comes back tomorrow; each "knew it" waits longer: 3, 7, 16, 35, then 75
+days, and after that it's known and put away. Six "not yet"s put it away
+too: a line that hard is better met again in a story. At most **ten lines
+kept a day** and **thirty heard again a day**, so the review stays a few
+minutes and never grows into a backlog that eats the listening. Nothing is
+counted, scored or kept in a row on screen. When today's are done it says
+so and stops.
+
+A kept line's sound is cut from the video when you keep it (the line, from
+0.15 s before to 0.35 s after), so it stays when the video leaves the shelf.
+If the cut fails the line is kept without it, and the card says to read it
+aloud instead. Each Mac keeps its own lines.
 
 ## How the shelf gets here
 
@@ -171,6 +214,7 @@ Everything lives in `~/Library/Application Support/Russian Shelf/`, not
 | `Downloads/<id>/` | a download in progress |
 | `yt-dlp`, `Cache/`, `Logs/` | the downloader, its cache, the last run's output per video, and what git said the last time a report was sent (`report.log`) |
 | `Outbox/` | reports not sent yet |
+| `Lines/` | kept lines: `Lines.plist` (each line, its video, when it comes back) and `<id>-<ms>.m4a`, its sound. Kept when videos are deleted |
 
 Before each batch the app updates its copy of yt-dlp (`--update`), and then
 fetches one video per run from `https://www.youtube.com/watch?v=<id>`,
@@ -235,17 +279,35 @@ speech recognition (`ru-orig`). The tests use the first minute of each.
 ## What was watched
 
 When a video is finished, when the player closes after you've watched
-something, and when a shelf is replaced, the app writes a report:
+something (or asked for a line), and when a shelf is replaced, the app
+writes a report:
 
 ```
 Russian Shelf report
 shelf: 2026-10-12 (sealed 2026-10-11 20:15:07)
 written: 2026-10-14 21:05
+from: Ashwins-Mac-Pro
 
 JE4cI_Knzvc | finished | 19:20 of 19:20 | She Cut Her Hair to Save Her Husband ✂️ Story in Easy Russian
 abcdefghijk | partly | 4:10 of 11:30 | The Fox and the Crane
 lmnopqrstuv | not started | 0:00 of 9:12 | ...
+
+Help (lines shown, heard again, kept):
+JE4cI_Knzvc | shown 12 | heard again 8 | kept 2
+
+Kept:
+JE4cI_Knzvc | 4:10 | Она отрезала волосы, чтобы спасти мужа.
 ```
+
+- `from:` is the Mac's host name. Each Mac keeps its own record of what was
+  watched on it, so a shelf watched on two Macs has two sets of reports: the
+  newest from each Mac counts.
+- **Help** (only for videos where something was asked for): how many times a
+  line was shown (↓), heard again (↑ or a loop), and kept (K). It's how Claude
+  can tell whether a shelf is at the right level: a lot of help means stay at
+  this rung, little means move up. The app never shows these numbers.
+- **Kept** lists the lines kept from this shelf's videos, one per line (a
+  two-line cue joined with " / ").
 
 It adds it as a new file, `Russian/Reports/shelf-<start>_<when>.txt`, in one
 commit that adds that file and nothing else. The commit is built in a
@@ -280,7 +342,8 @@ the app relies on, on the Mac it runs on, and prints a line each:
 - Python, QuickJS, ffmpeg and yt-dlp start
 - certificates: YouTube's accepted, bad ones refused (needs the network)
 - git, `~/Study`, and the shelf in it
-- a downloaded video is one AVFoundation can play
+- a downloaded video is one AVFoundation can play, and a line's sound can be
+  cut from it
 
 ## Building
 
@@ -288,10 +351,11 @@ the app relies on, on the Mac it runs on, and prints a line each:
 make            build/RussianShelf.app
 make test       the model, under Rosetta: crypto, the shelf format, sealed files
                 (good, tampered, wrong key, too many videos), decryption, subtitles
-                of both kinds, rotation and deletion, the yt-dlp command lines,
-                reports, real git pulls and report pushes against a bare repository
+                of both kinds, rotation and deletion, kept lines and their days,
+                cutting a line's sound, the yt-dlp command lines, reports, real git
+                pulls and report pushes against a bare repository
 make tlstest    the certificate checks above (needs the network)
-make shots      the shelf and the player, rendered to build/shots
+make shots      the shelf, the player and the Lines window, rendered to build/shots
 make verify     the app and every bundled binary are Mavericks-compatible
 make analyze    the static analyser
 make dist       all of these, then Russian Shelf.zip

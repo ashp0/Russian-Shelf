@@ -16,6 +16,10 @@
 #import "RSShelf.h"
 #import "RSCrypto.h"
 #import "RSPlayer.h"
+#import "RSReview.h"
+#import "RSLines.h"
+#import "RSDate.h"
+#import "RSClip.h"
 
 static const char *KeyPrivate =
     "-----BEGIN EC PRIVATE KEY-----\n"
@@ -218,6 +222,22 @@ int main(int argc, const char *argv[])
         Spin(1.4);      // let the "Subtitles stay on." note pass
         [player setTimeForTesting:27.5];
         ShootBoth([player window], out, @"player-transcript");
+        [player toggleTranscript];
+        [player toggleSubtitles];
+        Spin(1.4);
+        // Working on one line: looped, slower, then kept.
+        [player setTimeForTesting:8.0];
+        [player toggleSlower];
+        [player toggleLoop];
+        [player revealLine];
+        printf("  looping  %s\n", [player looping] ? "yes" : "no");
+        ShootBoth([player window], out, @"player-loop");
+        [player toggleLoop];
+        [player toggleSlower];
+        [player setTimeForTesting:16.0];
+        [player keepLine];
+        printf("  kept     %s\n", [[player visibleNote] UTF8String]);
+        ShootBoth([player window], out, @"player-keep");
         [player close];
 
         // Automatic captions, rebuilt into sentences, in the transcript.
@@ -229,6 +249,44 @@ int main(int argc, const char *argv[])
         [player revealLine];
         ShootBoth([player window], out, @"player-auto");
         [player close];
+
+        // Lines to hear again: kept yesterday, so due today.
+        RSLines *lines = [c lines];
+        [lines keepText:@"Она отрезала волосы, чтобы спасти мужа." before:@"И тогда она решила."
+                  video:@"JE4cI_Knzvc" title:[NSString stringWithUTF8String:Videos[0][2]] start:250 end:253 today:RSToday() - 1 problem:NULL];
+        [lines keepText:@"Вася любит кошек." before:nil video:@"aaaaaaaaaa1" title:[NSString stringWithUTF8String:Videos[1][2]]
+                  start:61 end:63 today:RSToday() - 1 problem:NULL];
+        // A sound for the first (a second of silence, never played here), so
+        // it comes up as "listen"; the second has none.
+        NSString *wav = [out stringByAppendingPathComponent:@"silence.wav"];
+        NSMutableData *pcm = [NSMutableData dataWithLength:44 + 44100];
+        unsigned char *h = [pcm mutableBytes];
+        uint32_t u32; uint16_t u16;
+        memcpy(h, "RIFF", 4); u32 = 36 + 44100; memcpy(h + 4, &u32, 4); memcpy(h + 8, "WAVEfmt ", 8);
+        u32 = 16; memcpy(h + 16, &u32, 4); u16 = 1; memcpy(h + 20, &u16, 2); memcpy(h + 22, &u16, 2);
+        u32 = 22050; memcpy(h + 24, &u32, 4); u32 = 44100; memcpy(h + 28, &u32, 4);
+        u16 = 2; memcpy(h + 32, &u16, 2); u16 = 16; memcpy(h + 34, &u16, 2);
+        memcpy(h + 36, "data", 4); u32 = 44100; memcpy(h + 40, &u32, 4);
+        [pcm writeToFile:wav atomically:YES];
+        NSString *why = nil;
+        if (!RSCutClipNow(wav, 0.2, 0.8, [lines soundPath:[[lines lines] objectAtIndex:0]], &why))
+            fprintf(stderr, "rsshots: sound: %s\n", [why UTF8String]);
+        [[NSFileManager defaultManager] removeItemAtPath:wav error:NULL];
+        RSReview *review = [[[RSReview alloc] initWithLines:lines today:RSToday()] autorelease];
+        [review setSilentForTesting];
+        [[review window] orderOut:nil];
+        printf("  lines    state %d\n", (int)[review state]);
+        ShootBoth([review window], out, @"lines");
+        [review showLine];
+        ShootBoth([review window], out, @"lines-shown");
+        [review answer:YES];
+        printf("  next     %s\n", [[review visibleText] UTF8String]);
+        ShootBoth([review window], out, @"lines-nosound");
+        [review answer:YES];
+        ShootBoth([review window], out, @"lines-done");
+        [review close];
+        [c reloadRows];
+        ShootBoth([c window], out, @"shelf-after-lines");
 
         // No shelf at all, and one turned away.
         NSString *emptyFolder = [out stringByAppendingPathComponent:@"empty-library"];
