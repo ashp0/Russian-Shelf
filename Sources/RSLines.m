@@ -32,7 +32,8 @@ long RSLineGap(NSUInteger step)
         [NSNumber numberWithDouble:_start], @"start", [NSNumber numberWithDouble:_end], @"end",
         [NSNumber numberWithLong:_kept], @"kept", [NSNumber numberWithLong:_due], @"due",
         [NSNumber numberWithUnsignedInteger:_step], @"step", [NSNumber numberWithUnsignedInteger:_lapses], @"lapses",
-        [NSNumber numberWithBool:_putAway], @"putAway", nil];
+        [NSNumber numberWithBool:_putAway], @"putAway",
+        [NSNumber numberWithLong:_heard], @"heard", [NSNumber numberWithBool:_knewLast], @"knewLast", nil];
     if (_before) [d setObject:_before forKey:@"before"];
     return d;
 }
@@ -56,6 +57,8 @@ long RSLineGap(NSUInteger step)
     [line setStep:[[d objectForKey:@"step"] unsignedIntegerValue]];
     [line setLapses:[[d objectForKey:@"lapses"] unsignedIntegerValue]];
     [line setPutAway:[[d objectForKey:@"putAway"] boolValue]];
+    [line setHeard:[[d objectForKey:@"heard"] longValue]];
+    [line setKnewLast:[[d objectForKey:@"knewLast"] boolValue]];
     return line;
 }
 
@@ -184,6 +187,8 @@ static NSString *RSLineKey(NSString *video, double start)
     if (line == nil || ![_lines containsObject:line]) return;
     if (_heardDay != today) { _heardDay = today; _heardCount = 0; }
     _heardCount++;
+    [line setHeard:today];
+    [line setKnewLast:knew];
     if (knew) {
         [line setStep:[line step] + 1];
         long gap = RSLineGap([line step]);
@@ -195,6 +200,14 @@ static NSString *RSLineKey(NSString *video, double start)
         [line setDue:today + RSLineGap(0)];
         if ([line lapses] >= RSPutAwayAfter) [line setPutAway:YES];
     }
+}
+
+- (NSArray *)notYetOn:(long)today
+{
+    NSMutableArray *found = [NSMutableArray array];
+    for (RSKeptLine *line in _lines)
+        if ([line heard] == today && ![line knewLast] && ![line putAway]) [found addObject:line];
+    return found;
 }
 
 - (void)putAway:(RSKeptLine *)line

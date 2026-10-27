@@ -71,6 +71,11 @@ static const float RSReviewSlowerRate = 0.75;
     _today = today;
     _queue = [[lines dueOn:today] mutableCopy];
     _again = [[NSMutableSet alloc] init];
+    // "Not yet"s from earlier today (the window was closed): once more, at the end.
+    for (RSKeptLine *line in [lines notYetOn:today]) {
+        [_again addObject:[line key]];
+        if (![_queue containsObject:line]) [_queue addObject:line];
+    }
 
     NSSize size = [RSStyle reviewWindowSize];
     _window = [[RSReviewWindow alloc] initWithContentRect:NSMakeRect(0, 0, size.width, size.height)
@@ -254,7 +259,7 @@ static const float RSReviewSlowerRate = 0.75;
     switch (_state) {
         case RSReviewListening:
         case RSReviewShown:
-            heading = _state == RSReviewListening ? @"Listen. What does it say?" : @"Say it aloud with the sound.";
+            heading = _state == RSReviewListening ? @"Listen. What does it say?" : @"Now say it aloud.";
             if ([[_line title] length])
                 source = [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
             if (_state == RSReviewShown) {

@@ -34,6 +34,7 @@ typedef enum {
 @property (nonatomic, readonly) NSWindow *window;
 @property (nonatomic, readonly) RSReviewState state;
 @property (nonatomic, readonly) BOOL slower;
+@property (nonatomic, readonly) long today;
 
 - (void)show;
 - (void)close;

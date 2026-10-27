@@ -65,7 +65,7 @@ CFLAGS    := $(COMMON) -std=gnu99
 OBJCFLAGS := $(COMMON) -fno-objc-arc -fobjc-exceptions -Wno-objc-missing-property-synthesis
 LDBASE    := -arch x86_64 -mmacosx-version-min=$(MIN) -isysroot "$(SDK)" -Wl,-dead_strip $(LDQUIET)
 FRAMEWORKS := -framework Cocoa -framework AVKit -framework AVFoundation -framework CoreMedia \
-              -framework Security
+              -framework Security -framework CoreServices
 
 MODEL_SRC := Sources/RSDate.c Sources/RSKeys.c Sources/RSCrypto.m Sources/RSShelf.m Sources/RSSubtitles.m \
              Sources/RSProcess.m Sources/RSSync.m Sources/RSLibrary.m Sources/RSDownloader.m Sources/RSReport.m \
@@ -141,7 +141,7 @@ NOW   ?= 2026-10-14 20:30
 $(SUITE): Tests/rssuite.m $(MODEL_OBJ)
 	@echo "  compile  Tests/rssuite.m"
 	@$(CC) $(OBJCFLAGS) -c Tests/rssuite.m -o $(OBJ)/rssuite.o
-	@$(CC) $(LDBASE) -framework Foundation -framework Security -framework AVFoundation -framework CoreMedia \
+	@$(CC) $(LDBASE) -framework Foundation -framework Security -framework AVFoundation -framework CoreMedia -framework CoreServices \
 	   $(MODEL_OBJ) $(OBJ)/rssuite.o -o $@
 
 test: $(SUITE)

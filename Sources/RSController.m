@@ -468,7 +468,7 @@ static NSString *RSTimeText(time_t t)
         if (!ok) NSLog(@"Russian Shelf: %@", why);
     });
     [self reloadRows];
-    return @"Kept, with its sound. It comes back tomorrow (⌘L).";
+    return @"Kept. It comes back tomorrow (⌘L).";
 }
 
 - (void)playerClosed:(RSPlayer *)player
@@ -551,6 +551,7 @@ static NSString *RSTimeText(time_t t)
 
 - (RSReview *)showLines
 {
+    if (_review && [_review today] != RSToday()) [_review close];       // left open overnight
     if (_review == nil) {
         _review = [[RSReview alloc] initWithLines:_lines today:RSToday()];
         [_review setDelegate:self];

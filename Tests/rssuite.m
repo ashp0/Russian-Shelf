@@ -746,6 +746,15 @@ static void TestLines(void)
     CHECK([e putAway] && ![[lines dueOn:day + 30] containsObject:e], "put away by hand");
     CHECK([[lines linesFromVideo:@"abcdefghijk"] count] == 1 && [[lines linesFromVideo:@"JE4cI_Knzvc"] count] == 10, "lines by video");
 
+    // Not yet today: heard once more today, also after the window is closed.
+    RSKeptLine *f = [due objectAtIndex:3], *g = [due objectAtIndex:4];
+    [lines answer:f knew:NO today:day + 1];
+    [lines answer:g knew:YES today:day + 1];
+    NSArray *notYet = [lines notYetOn:day + 1];
+    CHECK([notYet containsObject:f] && ![notYet containsObject:g] && ![notYet containsObject:a] && [f heard] == day + 1 && ![f knewLast],
+          "today's not-yets: %lu", (unsigned long)[notYet count]);
+    CHECK([[lines notYetOn:day + 2] count] == 0 || ![[lines notYetOn:day + 2] containsObject:f], "only today's");
+
     // Saved and read back, the same.
     CHECK([lines save], "saved");
     RSLines *read = [[[RSLines alloc] initWithFolder:folder] autorelease];
@@ -755,6 +764,8 @@ static void TestLines(void)
           fabs([a2 start] - 12.345) < 1e-9 && [a2 end] == 14.5 && [a2 putAway] && [a2 step] == 6 && [a2 kept] == day,
           "a line read back");
     CHECK([c2 lapses] == 6 && [c2 putAway] && [[[read lines] objectAtIndex:3] before] == nil, "another, and no context is nil");
+    RSKeptLine *f2 = [[read lines] objectAtIndex:3];
+    CHECK([f2 heard] == day + 1 && ![f2 knewLast] && [[read notYetOn:day + 1] count] == 1, "the last answer read back");
 
     // Thirty a day, then the rest the next day.
     NSString *many = Temp(@"lines-many");

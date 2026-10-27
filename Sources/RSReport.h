@@ -32,7 +32,7 @@
 // "shelf-2026-10-12_2026-10-14-2105.txt": the shelf's start, then when.
 NSString *RSReportName(RSShelf *shelf, time_t now);
 NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_t now);
-// This Mac's host name, without ".local" ("Mac-Pro").
+// This Mac's name, as in Sharing ("Ashwin’s Mac Pro").
 NSString *RSComputerName(void);
 // "4:10", "1:02:03".
 NSString *RSClock(double seconds);

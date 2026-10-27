@@ -879,7 +879,7 @@ static NSDictionary *RSTranscriptText(BOOL current)
     } else {
         // Still hidden: where the line will go.
         NSDictionary *w = RSText(RSSerifItalic(14), RSInkFaint(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
-        CGFloat wh = RSLineHeight(RSSerifItalic(14));
+        CGFloat wh = RSLineHeight(RSSerifItalic(14)) + 6;      // room for the descenders
         RSDrawText(@"Try to say it, then ↓ shows the line.", w, NSMakeRect(NSMinX(body), round(NSMidY(body) - wh / 2), width, wh));
     }
     if ([note length]) {

@@ -525,6 +525,14 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 
 - (void)playedToEnd:(NSNotification *)n
 {
+    // A looped line that runs to the very end: the end is its pause.
+    if ([self looping] && !_loopPaused) {
+        RSLine *line = [[_subtitles lines] objectAtIndex:_loopIndex];
+        _loopPaused = YES;
+        [self performSelector:@selector(loopAgain) withObject:nil
+                   afterDelay:MAX(RSLoopPauseAtLeast, ([line end] - [line start]) / _rate + 0.5)];
+        return;
+    }
     double d = [self duration];
     if (_lastTime >= _furthest - RSSkipSeconds - 1) _furthest = MAX(_furthest, d);
     [self report];
@@ -766,6 +774,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 - (void)loopAgain
 {
     if (_loopIndex == NSNotFound || _closed) return;
+    // Played on, or moved with the scrubber, during the pause: the loop is over.
+    RSLine *line = [[_subtitles lines] objectAtIndex:_loopIndex];
+    double t = [self currentTime];
+    if ([self playing] || t < [line start] - 1 || t > [line end] + 2) { [self stopLoop]; return; }
     _loopPaused = NO;
     _loopSeekAt = CFAbsoluteTimeGetCurrent();
     [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:_loopIndex] start] - 0.05)];

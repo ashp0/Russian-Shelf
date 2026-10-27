@@ -252,7 +252,7 @@ int main(int argc, const char *argv[])
 
         // Lines to hear again: kept yesterday, so due today.
         RSLines *lines = [c lines];
-        [lines keepText:@"Она отрезала волосы, чтобы спасти мужа." before:@"И тогда она решила."
+        RSKeptLine *first = [lines keepText:@"Она отрезала волосы, чтобы спасти мужа." before:@"И тогда она решила."
                   video:@"JE4cI_Knzvc" title:[NSString stringWithUTF8String:Videos[0][2]] start:250 end:253 today:RSToday() - 1 problem:NULL];
         [lines keepText:@"Вася любит кошек." before:nil video:@"aaaaaaaaaa1" title:[NSString stringWithUTF8String:Videos[1][2]]
                   start:61 end:63 today:RSToday() - 1 problem:NULL];
@@ -269,9 +269,13 @@ int main(int argc, const char *argv[])
         memcpy(h + 36, "data", 4); u32 = 44100; memcpy(h + 40, &u32, 4);
         [pcm writeToFile:wav atomically:YES];
         NSString *why = nil;
-        if (!RSCutClipNow(wav, 0.2, 0.8, [lines soundPath:[[lines lines] objectAtIndex:0]], &why))
+        if (!RSCutClipNow(wav, 0.2, 0.8, [lines soundPath:first], &why))
             fprintf(stderr, "rsshots: sound: %s\n", [why UTF8String]);
         [[NSFileManager defaultManager] removeItemAtPath:wav error:NULL];
+        [[c window] setContentSize:[RSStyle shelfWindowSize]];
+        [c setStatusForTesting:@"Looked for a new shelf at 8:30 PM." problem:NO];
+        [c reloadRows];
+        ShootBoth([c window], out, @"shelf-lines-due");
         RSReview *review = [[[RSReview alloc] initWithLines:lines today:RSToday()] autorelease];
         [review setSilentForTesting];
         [[review window] orderOut:nil];

@@ -36,6 +36,8 @@ extern const NSUInteger RSPutAwayAfter;        // 6 times "not yet"
 @property (nonatomic) long kept, due;                   // days (RSDate)
 @property (nonatomic) NSUInteger step, lapses;          // "knew it"s in a row; "not yet"s in all
 @property (nonatomic) BOOL putAway;                     // known, or not for now
+@property (nonatomic) long heard;                       // the day of the last answer (0: never)
+@property (nonatomic) BOOL knewLast;                    // what that answer was
 @end
 
 @interface RSLines : NSObject
@@ -54,6 +56,9 @@ extern const NSUInteger RSPutAwayAfter;        // 6 times "not yet"
 // Today's lines to hear again: those due by today, oldest due first, as
 // many as today still allows.
 - (NSArray *)dueOn:(long)today;
+// Lines answered "not yet" today and not put away: heard once more before
+// today's are done (not counted again, not moved again).
+- (NSArray *)notYetOn:(long)today;
 // "Knew it" (YES) or "not yet" (NO). Counts towards today's thirty.
 - (void)answer:(RSKeptLine *)line knew:(BOOL)knew today:(long)today;
 // Put a line away by hand.

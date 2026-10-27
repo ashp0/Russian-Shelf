@@ -3,6 +3,7 @@
 #import "RSShelf.h"
 #import "RSLines.h"
 #include <unistd.h>
+#include <CoreServices/CoreServices.h>
 
 static NSString *RSLocalTime(time_t t, const char *format)
 {
@@ -25,13 +26,17 @@ NSString *RSReportName(RSShelf *shelf, time_t now)
     return [NSString stringWithFormat:@"shelf-%@_%@.txt", [shelf startText], RSLocalTime(now, "%Y-%m-%d-%H%M")];
 }
 
-// gethostname, not NSHost: NSHost can wait on the network, and a report is
-// written on the main thread, often offline.
+// The name in Sharing. Not NSHost (it can wait on the network, and a report is
+// written on the main thread, often offline), and not gethostname alone (it
+// can follow the network: a campus DHCP name one day, the Mac's own the next).
 NSString *RSComputerName(void)
 {
-    char buffer[256] = { 0 };
-    NSString *name = gethostname(buffer, sizeof buffer - 1) == 0 ? [NSString stringWithUTF8String:buffer] : nil;
-    if ([name hasSuffix:@".local"]) name = [name substringToIndex:[name length] - 6];
+    NSString *name = [(NSString *)CSCopyMachineName() autorelease];
+    if ([name length] == 0) {
+        char buffer[256] = { 0 };
+        name = gethostname(buffer, sizeof buffer - 1) == 0 ? [NSString stringWithUTF8String:buffer] : nil;
+        if ([name hasSuffix:@".local"]) name = [name substringToIndex:[name length] - 6];
+    }
     name = [[name componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]] componentsJoinedByString:@" "];
     return [name length] ? name : @"this Mac";
 }

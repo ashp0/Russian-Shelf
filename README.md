@@ -286,7 +286,7 @@ writes a report:
 Russian Shelf report
 shelf: 2026-10-12 (sealed 2026-10-11 20:15:07)
 written: 2026-10-14 21:05
-from: Ashwins-Mac-Pro
+from: Ashwin’s Mac Pro
 
 JE4cI_Knzvc | finished | 19:20 of 19:20 | She Cut Her Hair to Save Her Husband ✂️ Story in Easy Russian
 abcdefghijk | partly | 4:10 of 11:30 | The Fox and the Crane
@@ -299,7 +299,8 @@ Kept:
 JE4cI_Knzvc | 4:10 | Она отрезала волосы, чтобы спасти мужа.
 ```
 
-- `from:` is the Mac's host name. Each Mac keeps its own record of what was
+- `from:` is the Mac's name in Sharing (not its network host name, which can
+  change with the wifi). Each Mac keeps its own record of what was
   watched on it, so a shelf watched on two Macs has two sets of reports: the
   newest from each Mac counts.
 - **Help** (only for videos where something was asked for): how many times a
