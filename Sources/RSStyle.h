@@ -68,6 +68,13 @@ typedef enum {
 + (void)drawTranscriptBackgroundIn:(NSRect)rect;
 + (void)drawTranscriptEmptyIn:(NSRect)rect message:(NSString *)message;
 
+// ---- Lines to hear again (RSReview) ----
++ (NSSize)reviewWindowSize;
+// An index card on the bookcase's back, the keys along the bottom. `text`
+// nil: the line is still hidden. `message` is for when there's no line up.
++ (void)drawReviewIn:(NSRect)rect heading:(NSString *)heading source:(NSString *)source before:(NSString *)before
+                text:(NSString *)text message:(NSString *)message note:(NSString *)note keys:(NSArray *)keys;
+
 // ---- Shared ----
 + (NSString *)clock:(double)seconds;                            // "4:10"
 

@@ -43,6 +43,15 @@ typedef enum {
 
 extern const double RSFinishedFraction;     // 0.9
 
+// What the player was asked for, counted per video for the report: lines
+// shown (↓), lines heard again (↑ or a loop), lines kept (K). Facts for
+// Claude choosing the next shelf; the app never shows them.
+typedef enum {
+    RSHelpShown = 0,
+    RSHelpHeardAgain,
+    RSHelpKept
+} RSHelp;
+
 @interface RSLibrary : NSObject
 
 + (NSString *)defaultFolder;
@@ -82,6 +91,8 @@ extern const double RSFinishedFraction;     // 0.9
 // Returns YES if this made the video finished.
 - (BOOL)recordPosition:(double)position furthest:(double)furthest duration:(double)duration
                    for:(NSString *)identifier;
+- (void)countHelp:(RSHelp)kind for:(NSString *)identifier;
+- (NSUInteger)help:(RSHelp)kind for:(NSString *)identifier;
 // The first video on this week's shelf not finished yet, or nil.
 - (NSString *)nextIdentifier;
 

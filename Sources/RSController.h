@@ -16,11 +16,12 @@
 #import "RSShelfView.h"
 #import "RSPlayer.h"
 #import "RSDownloader.h"
+#import "RSReview.h"
 
-@class RSLibrary;
+@class RSLibrary, RSLines;
 
 @interface RSController : NSObject <NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate,
-                                    RSShelfViewDelegate, RSPlayerDelegate, RSDownloaderDelegate>
+                                    RSShelfViewDelegate, RSPlayerDelegate, RSDownloaderDelegate, RSReviewDelegate>
 
 // nil for both: the real ones (Application Support, ~/Study).
 - (id)initWithLibrary:(RSLibrary *)library studyFolder:(NSString *)studyFolder;
@@ -29,10 +30,13 @@
 @property (nonatomic, readonly) RSShelfView *shelfView;
 @property (nonatomic, readonly) RSPlayer *player;
 @property (nonatomic, readonly) RSLibrary *library;
+@property (nonatomic, readonly) RSLines *lines;          // kept lines, in the library's Lines/
+@property (nonatomic, readonly) RSReview *review;        // the Lines window, while open
 
 - (void)showWindow;
 - (void)reloadRows;
 - (RSPlayer *)playVideo:(NSString *)identifier;
+- (RSReview *)showLines;
 
 // For the screenshots.
 - (void)setStatusForTesting:(NSString *)text problem:(BOOL)problem;

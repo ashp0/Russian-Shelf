@@ -819,4 +819,73 @@ static NSDictionary *RSTranscriptText(BOOL current)
     RSDrawText(message, m, NSMakeRect(NSMinX(rect) + RSMarginX + 10, NSMinY(rect) + 40, NSWidth(rect) - RSMarginX - 30, 80));
 }
 
+// ---- Lines to hear again ------------------------------------------------------
+//
+// A library index card, propped on a shelf: a red rule under the heading,
+// faint blue rules below, the line written large once it's shown.
+
++ (NSSize)reviewWindowSize { return NSMakeSize(640, 400); }
+
++ (void)drawReviewIn:(NSRect)rect heading:(NSString *)heading source:(NSString *)source before:(NSString *)before
+                text:(NSString *)text message:(NSString *)message note:(NSString *)note keys:(NSArray *)keys
+{
+    CGFloat bar = [self hintBarHeight];
+    NSRect wall = rect;
+    wall.origin.y += bar;
+    wall.size.height -= bar;
+    RSDrawBack(wall);
+    RSDrawCastShadow(wall, 10);
+    NSRect plank = NSMakeRect(NSMinX(wall), NSMinY(wall), NSWidth(wall), RSPlankHeight);
+    RSDrawPlank(plank);
+    [self drawHintBarIn:RSBottomStrip(rect, bar) items:keys];
+
+    NSRect card = NSMakeRect(NSMinX(wall) + 44, NSMaxY(plank) + 6, NSWidth(wall) - 88, NSHeight(wall) - RSPlankHeight - 6 - 30);
+    RSDrawCard(card, 0, YES);
+    CGFloat pad = 24;
+    CGFloat ruleY = NSMaxY(card) - 44;
+    // Blue rules, then the red one under the heading.
+    [RSRGB(0xa9c4e0, 0.55) set];
+    for (CGFloat y = ruleY - 30; y > NSMinY(card) + 14; y -= 30)
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(card) + 1, y, NSWidth(card) - 2, 1), NSCompositeSourceOver);
+    [RSRGB(0xe08a8a, 0.85) set];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(card) + 1, ruleY, NSWidth(card) - 2, 1), NSCompositeSourceOver);
+
+    CGFloat width = NSWidth(card) - 2 * pad;
+    NSDictionary *h = RSText(RSSerifBold(16), RSInk(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+    RSDrawText(heading, h, NSMakeRect(NSMinX(card) + pad, ruleY + 10, width, 22));
+    CGFloat top = ruleY - 8;
+    if ([source length]) {
+        NSDictionary *a = RSText(RSSerifItalic(11.5), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText(source, a, NSMakeRect(NSMinX(card) + pad, top - 16, width, 16));
+        top -= 26;
+    }
+    CGFloat bottom = NSMinY(card) + ([note length] ? 34 : 16);
+    if ([before length]) {
+        NSDictionary *b = RSText(RSSerifItalic(13), RSInkFaint(), NSLeftTextAlignment, NSLineBreakByWordWrapping);
+        NSString *one = [[before componentsSeparatedByString:@"\n"] componentsJoinedByString:@" "];
+        CGFloat bh = MIN(36, RSHeightOf(one, b, width));
+        RSDrawText(one, b, NSMakeRect(NSMinX(card) + pad, top - bh, width, bh));
+        top -= bh + 8;
+    }
+    NSRect body = NSMakeRect(NSMinX(card) + pad, bottom, width, MAX(0, top - bottom));
+    if ([text length]) {
+        NSDictionary *t = RSText(RSSerif(24), RSInk(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+        CGFloat th = MIN(NSHeight(body), RSHeightOf(text, t, width));
+        RSDrawText(text, t, NSMakeRect(NSMinX(body), round(NSMidY(body) - th / 2), width, th));
+    } else if ([message length]) {
+        NSDictionary *m = RSText(RSSerif(15), RSInkSoft(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+        CGFloat mh = MIN(NSHeight(body), RSHeightOf(message, m, width - 40));
+        RSDrawText(message, m, NSMakeRect(NSMinX(body) + 20, round(NSMidY(body) - mh / 2), width - 40, mh));
+    } else {
+        // Still hidden: where the line will go.
+        NSDictionary *w = RSText(RSSerifItalic(14), RSInkFaint(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+        CGFloat wh = RSLineHeight(RSSerifItalic(14));
+        RSDrawText(@"Try to say it, then ↓ shows the line.", w, NSMakeRect(NSMinX(body), round(NSMidY(body) - wh / 2), width, wh));
+    }
+    if ([note length]) {
+        NSDictionary *n = RSText(RSSerifItalic(12), RSRibbon(), NSCenterTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText(note, n, NSMakeRect(NSMinX(card) + pad, NSMinY(card) + 12, width, 16));
+    }
+}
+
 @end

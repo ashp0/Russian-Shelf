@@ -303,13 +303,32 @@ static NSString *RSFirstFile(NSString *folder, NSString *prefix, NSArray *extens
     double far = MAX([old furthest], furthest);
     if (duration > 0) far = MIN(far, duration);
     BOOL finished = [old finished] || (duration > 0 && far >= RSFinishedFraction * duration);
-    NSDictionary *w = [NSDictionary dictionaryWithObjectsAndKeys:
-        [NSNumber numberWithDouble:MAX(0, position)], @"position",
-        [NSNumber numberWithDouble:far], @"furthest",
-        [NSNumber numberWithDouble:MAX(0, duration)], @"duration",
-        [NSNumber numberWithBool:finished], @"finished", nil];
+    NSMutableDictionary *w = [NSMutableDictionary dictionaryWithDictionary:[_watched objectForKey:identifier] ?: [NSDictionary dictionary]];
+    [w setObject:[NSNumber numberWithDouble:MAX(0, position)] forKey:@"position"];
+    [w setObject:[NSNumber numberWithDouble:far] forKey:@"furthest"];
+    [w setObject:[NSNumber numberWithDouble:MAX(0, duration)] forKey:@"duration"];
+    [w setObject:[NSNumber numberWithBool:finished] forKey:@"finished"];
     [_watched setObject:w forKey:identifier];
     return finished && ![old finished];
+}
+
+static NSString *RSHelpKey(RSHelp kind)
+{
+    return kind == RSHelpShown ? @"shown" : kind == RSHelpHeardAgain ? @"heardAgain" : @"kept";
+}
+
+- (void)countHelp:(RSHelp)kind for:(NSString *)identifier
+{
+    if ([identifier length] == 0) return;
+    NSMutableDictionary *w = [NSMutableDictionary dictionaryWithDictionary:[_watched objectForKey:identifier] ?: [NSDictionary dictionary]];
+    NSUInteger n = [[w objectForKey:RSHelpKey(kind)] unsignedIntegerValue] + 1;
+    [w setObject:[NSNumber numberWithUnsignedInteger:n] forKey:RSHelpKey(kind)];
+    [_watched setObject:w forKey:identifier];
+}
+
+- (NSUInteger)help:(RSHelp)kind for:(NSString *)identifier
+{
+    return [[[_watched objectForKey:identifier] objectForKey:RSHelpKey(kind)] unsignedIntegerValue];
 }
 
 - (NSString *)nextIdentifier

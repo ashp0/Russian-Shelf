@@ -11,6 +11,8 @@ static const double RSRevealAtLeast = 2.0;     // a revealed line stays at least
 static const double RSReportEvery = 5;          // seconds of wall time between position reports
 static const double RSUserScrollQuiet = 5;      // after the reader scrolls the transcript, leave it alone
 static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline controls, along the bottom of the picture
+static const float RSSlowerRate = 0.75;         // "slower": three-quarter speed
+static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line, to say it back (seconds)
 
 @class RSPlayer;
 
@@ -260,9 +262,10 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     RSSubtitles *_subtitles;
     NSString *_title, *_note;
     double _position, _furthest, _duration, _lastTime, _testingTime, _revealAt;
-    NSUInteger _revealIndex;
+    NSUInteger _revealIndex, _loopIndex;
+    float _rate;
     CFAbsoluteTime _lastReport, _noteUntil, _userScrolledAt;
-    BOOL _scrollingTranscript, _closed;
+    BOOL _scrollingTranscript, _closed, _loopPaused, _observingRate;
 }
 @property (nonatomic, readwrite, copy) NSString *identifier;
 @property (nonatomic, readwrite) BOOL subtitlesOn, transcriptShown;
@@ -283,6 +286,8 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     _duration = duration;
     _testingTime = -1;
     _revealIndex = NSNotFound;
+    _loopIndex = NSNotFound;
+    _rate = 1;
 
     NSSize video = [RSStyle playerVideoSize];
     NSRect frame = NSMakeRect(0, 0, video.width, video.height + [RSStyle hintBarHeight]);
@@ -309,6 +314,11 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     [content addSubview:_playerView];
     if (moviePath) {
         _player = [[AVPlayer alloc] initWithURL:[NSURL fileURLWithPath:moviePath]];
+        // Slower keeps the voice's pitch (Spectral is OS X's default; said
+        // here so it stays that way).
+        [[_player currentItem] setAudioTimePitchAlgorithm:AVAudioTimePitchAlgorithmSpectral];
+        [_player addObserver:self forKeyPath:@"rate" options:0 context:NULL];
+        _observingRate = YES;
         [_playerView setPlayer:_player];
         __block RSPlayer *me = self;      // not retained: the observer is removed in -close
         _timeObserver = [[_player addPeriodicTimeObserverForInterval:CMTimeMake(1, 10) queue:dispatch_get_main_queue()
@@ -352,7 +362,9 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
 
 - (void)dealloc
 {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    if (_observingRate) [_player removeObserver:self forKeyPath:@"rate"];
     [_window setOwner:nil];
     [_window setDelegate:nil];
     [_window release];
@@ -400,7 +412,7 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
 - (void)show
 {
     [_window makeKeyAndOrderFront:nil];
-    [_player play];
+    [self play];
     [self tick];
 }
 
@@ -409,6 +421,10 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     if (_closed) return;
     _closed = YES;
     [self report];
+    [self stopLoop];
+    [NSObject cancelPreviousPerformRequestsWithTarget:self];
+    if (_observingRate) [_player removeObserver:self forKeyPath:@"rate"];
+    _observingRate = NO;
     [_player pause];
     if (_timeObserver) [_player removeTimeObserver:_timeObserver];
     [_timeObserver release];
@@ -447,6 +463,33 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     return [_player rate] > 0;
 }
 
+- (BOOL)slower
+{
+    return _rate < 1;
+}
+
+- (BOOL)looping
+{
+    return _loopIndex != NSNotFound;
+}
+
+// Plays at the chosen speed.
+- (void)play
+{
+    [_player setRate:_rate];
+}
+
+// AVPlayerView's own play button plays at full speed: keep to the chosen one.
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
+{
+    if (object == _player && [keyPath isEqualToString:@"rate"]) {
+        float rate = [_player rate];
+        if (rate > 0 && fabsf(rate - _rate) > 0.01f) [_player setRate:_rate];
+        return;
+    }
+    [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+}
+
 - (void)report
 {
     double t = [self currentTime], d = [self duration];
@@ -463,6 +506,7 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     if ([self playing] && t > _lastTime && t - _lastTime <= RSSkipSeconds + 1 && _lastTime <= _furthest + RSSkipSeconds + 1)
         _furthest = MAX(_furthest, t);
     _lastTime = t;
+    [self loopAt:t];
     [self updateCaptionAt:t];
     [self updateTranscriptAt:t];
     if ([self playing] && CFAbsoluteTimeGetCurrent() - _lastReport >= RSReportEvery) [self report];
@@ -507,6 +551,11 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     return [_captionView caption];
 }
 
+- (NSString *)visibleNote
+{
+    return [_captionView note];
+}
+
 // ---- What's over the video ----------------------------------------------------
 
 - (void)showNote:(NSString *)note for:(double)seconds
@@ -529,7 +578,9 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     NSArray *lines = [_subtitles lines];
     if (_revealIndex != NSNotFound && _revealIndex < [lines count]) {
         RSLine *line = [lines objectAtIndex:_revealIndex];
-        if (t < [line start] - 0.25 || t >= MAX([line end], _revealAt + RSRevealAtLeast)) _revealIndex = NSNotFound;
+        // Shown while it's said (at least two seconds), or all through a loop of it.
+        if (_revealIndex == _loopIndex) caption = [line text];
+        else if (t < [line start] - 0.25 || t >= MAX([line end], _revealAt + RSRevealAtLeast)) _revealIndex = NSNotFound;
         else caption = [line text];
     }
     if (caption == nil && _subtitlesOn) {
@@ -567,18 +618,26 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
 
 - (void)togglePlay
 {
+    if ([self looping]) {
+        // Space ends a loop where it is: paused if it was waiting for you.
+        BOOL waiting = _loopPaused;
+        [self stopLoop];
+        [self showNote:@"Loop off." for:1.2];
+        if (waiting) return;
+    }
     if ([self playing]) {
         [_player pause];
         [self report];
     } else {
         double d = [self duration];
         if (d > 0 && [self currentTime] >= d - 0.3) [self seekTo:0];
-        [_player play];
+        [self play];
     }
 }
 
 - (void)skip:(double)seconds
 {
+    [self stopLoop];
     [self seekTo:[self currentTime] + seconds];
 }
 
@@ -586,8 +645,9 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
 {
     double t = [self currentTime];
     if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles." for:2.5]; return; }
-    NSUInteger i = [_subtitles indexToRevealAtTime:t];
+    NSUInteger i = [self lineMeantAt:t];
     if (i == NSNotFound) { [self showNote:@"Nothing is being said just now." for:1.5]; return; }
+    if (_revealIndex != i) [_delegate player:self helped:RSHelpShown];
     _revealIndex = i;
     _revealAt = t;
     [self updateCaptionAt:t];
@@ -600,14 +660,17 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
         [self showNote:@"No subtitles to find the line: back five seconds." for:2];
         return;
     }
-    NSUInteger i = [_subtitles indexToReplayAtTime:[self currentTime]];
+    NSUInteger i = [self looping] ? _loopIndex : [_subtitles indexToReplayAtTime:[self currentTime]];
+    [self stopLoop];
     if (i == NSNotFound) return;
     [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:i] start] - 0.05)];
-    [_player play];
+    [self play];
+    [_delegate player:self helped:RSHelpHeardAgain];
 }
 
 - (void)seekToLine:(NSUInteger)index
 {
+    [self stopLoop];
     if (index >= [[_subtitles lines] count]) return;
     [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:index] start] - 0.05)];
 }
@@ -642,14 +705,100 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
     }
 }
 
+// ---- Working on one line ------------------------------------------------------
+
+// The line a key means: the one being looped, or being said, or the one just
+// said.
+- (NSUInteger)lineMeantAt:(double)t
+{
+    if ([self looping]) return _loopIndex;
+    return [_subtitles indexToRevealAtTime:t];
+}
+
+- (void)toggleLoop
+{
+    if ([self looping]) {
+        [self stopLoop];
+        [self showNote:@"Loop off." for:1.2];
+        [self updateHints];
+        return;
+    }
+    if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles, so there are no lines to loop." for:2.5]; return; }
+    NSUInteger i = [_subtitles indexToReplayAtTime:[self currentTime]];
+    if (i == NSNotFound) { [self showNote:@"Nothing has been said yet." for:1.5]; return; }
+    _loopIndex = i;
+    _loopPaused = NO;
+    [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:i] start] - 0.05)];
+    [self play];
+    [_delegate player:self helped:RSHelpHeardAgain];
+    [self showNote:@"This line, again and again. Say it back in the pause. L stops." for:3];
+    [self updateHints];
+}
+
+- (void)stopLoop
+{
+    if (_loopIndex == NSNotFound) return;
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(loopAgain) object:nil];
+    if (_revealIndex == _loopIndex) _revealIndex = NSNotFound;
+    _loopIndex = NSNotFound;
+    _loopPaused = NO;
+    [self updateHints];
+}
+
+// At the end of a looped line: pause as long as the line took (at least a
+// second and a half), then from its start again.
+- (void)loopAt:(double)t
+{
+    if (_loopIndex == NSNotFound || _loopPaused || ![self playing]) return;
+    RSLine *line = [[_subtitles lines] objectAtIndex:_loopIndex];
+    if (t < [line end] + 0.1 && t >= [line start] - 1) return;
+    [_player pause];
+    _loopPaused = YES;
+    double pause = MAX(RSLoopPauseAtLeast, ([line end] - [line start]) / _rate + 0.5);
+    [self performSelector:@selector(loopAgain) withObject:nil afterDelay:pause];
+}
+
+- (void)loopAgain
+{
+    if (_loopIndex == NSNotFound || _closed) return;
+    _loopPaused = NO;
+    [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:_loopIndex] start] - 0.05)];
+    [self play];
+}
+
+- (void)toggleSlower
+{
+    _rate = _rate < 1 ? 1 : RSSlowerRate;
+    if ([self playing]) [self play];
+    [self showNote:_rate < 1 ? @"Three-quarter speed." : @"Full speed." for:1.2];
+    [self updateHints];
+}
+
+- (void)keepLine
+{
+    if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles, so there’s no line to keep." for:2.5]; return; }
+    double t = [self currentTime];
+    NSUInteger i = [self lineMeantAt:t];
+    if (i == NSNotFound) { [self showNote:@"Nothing is being said just now." for:1.5]; return; }
+    NSArray *lines = [_subtitles lines];
+    NSString *said = [_delegate player:self keepLine:[lines objectAtIndex:i] before:i > 0 ? [lines objectAtIndex:i - 1] : nil];
+    // Show what was kept.
+    _revealIndex = i;
+    _revealAt = t;
+    [self showNote:said for:2.5];
+}
+
 - (void)updateHints
 {
     [_hintBar setItems:[NSArray arrayWithObjects:
-        @"Space", @"Play or pause",
-        @"←  →", @"5 seconds",
-        @"↓", @"Show the line",
-        @"↑", @"Hear it again",
-        @"S", _subtitlesOn ? @"Subtitles off" : @"Subtitles on",
+        @"Space", @"Play",
+        @"←  →", @"5 s",
+        @"↓", @"Show line",
+        @"↑", @"Again",
+        @"L", [self looping] ? @"Stop loop" : @"Loop",
+        @"−", [self slower] ? @"Full speed" : @"Slower",
+        @"K", @"Keep",
+        @"S", _subtitlesOn ? @"Subtitles off" : @"Subtitles",
         @"T", _transcriptShown ? @"Hide transcript" : @"Transcript",
         [self fullScreen] ? @"Esc" : @"F", [self fullScreen] ? @"Leave full screen" : @"Full screen", nil]];
 }
@@ -684,6 +833,9 @@ static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline control
         case 's': case 'S':             [self toggleSubtitles]; return YES;
         case 't': case 'T':             [self toggleTranscript]; return YES;
         case 'f': case 'F':             [self toggleFullScreen]; return YES;
+        case 'l': case 'L':             [self toggleLoop]; return YES;
+        case '-': case 0x2212:          [self toggleSlower]; return YES;
+        case 'k': case 'K':             [self keepLine]; return YES;
         case 27:                        // Escape
             if (![self fullScreen]) return NO;
             [self toggleFullScreen];

@@ -1,6 +1,7 @@
 // Russian Shelf's model, checked: the cryptography, the shelf format, the
 // sealed file, subtitles of both kinds, the library's rules for new shelves,
-// rotation and deletion, the yt-dlp command lines, reports, and git: real
+// rotation and deletion, kept lines and their days, cutting a line's sound,
+// the yt-dlp command lines, reports, and git: real
 // pulls (with another git holding the lock) and real report pushes against a
 // bare repository.
 //
@@ -21,6 +22,8 @@
 #import "RSReport.h"
 #import "RSSync.h"
 #import "RSDate.h"
+#import "RSLines.h"
+#import "RSClip.h"
 
 static int failures = 0, checks = 0;
 
@@ -636,17 +639,188 @@ static void TestReports(void)
     NSString *name = RSReportName([library current], when);
     CHECK([name isEqualToString:@"shelf-2026-10-12_2026-10-14-2105.txt"], "report name: %s", [name UTF8String]);
     CHECK([RSSync isReportPath:[@"Russian/Reports/" stringByAppendingString:name]], "and it's a report path");
-    NSString *text = RSReportText([library current], library, when);
+    RSLines *none = [[[RSLines alloc] initWithFolder:Temp(@"report-lines-none")] autorelease];
+    NSString *text = RSReportText([library current], library, none, when);
     CHECK(Has(text, @"shelf: 2026-10-12 (sealed 2026-10-11 20:00:00)") && Has(text, @"written: 2026-10-14 21:05"), "report header");
     CHECK(Has(text, [Id(1) stringByAppendingString:@" | finished | 11:30 of 11:30 | Story"]), "finished line:\n%s", [text UTF8String]);
     CHECK(Has(text, [Id(2) stringByAppendingString:@" | partly | 4:10 of 11:30 | Story"]), "partly line");
     CHECK(Has(text, [Id(3) stringByAppendingString:@" | not started | 0:00 of 9:12 | Story"]), "not started line");
     CHECK(Has(text, [Id(4) stringByAppendingString:@" | not downloaded | - | Story"]), "not downloaded line");
+    NSString *from = [NSString stringWithFormat:@"written: 2026-10-14 21:05\nfrom: %@\n\n", RSComputerName()];
+    CHECK(Has(text, from) &&
+          ![RSComputerName() hasSuffix:@".local"] && [RSComputerName() length] > 0, "which Mac wrote it: %s", [RSComputerName() UTF8String]);
+    CHECK(!Has(text, @"Help (") && !Has(text, @"Kept:"), "no help asked, nothing kept: no sections");
+
+    // Lines shown, heard again and kept, and the kept lines themselves.
+    [library countHelp:RSHelpShown for:Id(2)];
+    [library countHelp:RSHelpShown for:Id(2)];
+    [library countHelp:RSHelpHeardAgain for:Id(2)];
+    [library countHelp:RSHelpKept for:Id(2)];
+    [library countHelp:RSHelpShown for:@"notonshelf1"];
+    RSLines *lines = [[[RSLines alloc] initWithFolder:Temp(@"report-lines")] autorelease];
+    [lines keepText:@"Она отрезала\nволосы." before:nil video:Id(2) title:@"Story" start:250.4 end:252 today:100 problem:NULL];
+    [lines keepText:@"Elsewhere." before:nil video:@"notonshelf1" title:@"Other" start:5 end:6 today:100 problem:NULL];
+    text = RSReportText([library current], library, lines, when);
+    NSString *helpLine = [NSString stringWithFormat:@"\nHelp (lines shown, heard again, kept):\n%@ | shown 2 | heard again 1 | kept 1\n", Id(2)];
+    CHECK(Has(text, helpLine), "help section:\n%s", [text UTF8String]);
+    CHECK(!Has(text, [Id(1) stringByAppendingString:@" | shown"]) && !Has(text, @"notonshelf1"), "only this shelf's videos, only those helped");
+    NSString *keptLine = [NSString stringWithFormat:@"\nKept:\n%@ | 4:10 | Она отрезала / волосы.\n", Id(2)];
+    CHECK(Has(text, keptLine) && !Has(text, @"Elsewhere"), "kept section, on one line each");
+    CHECK(Has(text, [Id(2) stringByAppendingString:@" | partly | 4:10 of 11:30 | Story"]) && [text rangeOfString:@"\nHelp ("].location > [text rangeOfString:Id(4)].location, "the video lines are as before, then help");
+    // Help counts survive more watching, and a reload.
+    [library recordPosition:300 furthest:300 duration:690 for:Id(2)];
+    [library save];
+    RSLibrary *again = [[[RSLibrary alloc] initWithFolder:folder aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    CHECK([again help:RSHelpShown for:Id(2)] == 2 && [again help:RSHelpHeardAgain for:Id(2)] == 1 &&
+          [again help:RSHelpKept for:Id(2)] == 1 && [again help:RSHelpShown for:Id(3)] == 0 && [[again watchFor:Id(2)] furthest] == 300,
+          "help counts kept with the watching, and saved");
     CHECK([RSClock(3725) isEqualToString:@"1:02:05"] && [RSClock(59.6) isEqualToString:@"1:00"] && [RSClock(-3) isEqualToString:@"0:00"], "clock");
 
     NSArray *bad = [NSArray arrayWithObjects:@"Russian/Reports/../shelf.signed", @"Inbox/note.txt", @"Russian/Reports/a/b.txt",
                     @"Russian/shelf.signed", @"Russian/Reports/.hidden.txt", @"Russian/Reports/x.sh", @"Russian/Reports/", nil];
     for (NSString *p in bad) CHECK(![RSSync isReportPath:p], "not a report path: %s", [p UTF8String]);
+}
+
+// ---- Kept lines ------------------------------------------------------------
+
+static void TestLines(void)
+{
+    NSString *folder = Temp(@"lines");
+    [[NSFileManager defaultManager] removeItemAtPath:folder error:NULL];
+    RSLines *lines = [[[RSLines alloc] initWithFolder:folder] autorelease];
+    long day = RSDaysFromCivil(2026, 10, 27);
+    CHECK([[lines lines] count] == 0 && [[lines dueOn:day] count] == 0, "no lines yet");
+    CHECK(RSLineGap(0) == 1 && RSLineGap(1) == 3 && RSLineGap(2) == 7 && RSLineGap(3) == 16 && RSLineGap(4) == 35 &&
+          RSLineGap(5) == 75 && RSLineGap(6) == 0, "the gaps: 1, 3, 7, 16, 35, 75 days, then put away");
+
+    NSString *problem = nil;
+    RSKeptLine *a = [lines keepText:@"Привет, друзья!" before:@"Сегодня" video:@"JE4cI_Knzvc" title:@"She Cut Her Hair"
+                              start:12.345 end:14.5 today:day problem:&problem];
+    CHECK(a && [a due] == day + 1 && [a kept] == day && [a step] == 0 && ![a putAway], "kept, back tomorrow");
+    CHECK([[a key] isEqualToString:@"JE4cI_Knzvc-0000012345"], "its key: %s", [[a key] UTF8String]);
+    CHECK([[lines soundPath:a] isEqualToString:[folder stringByAppendingPathComponent:@"JE4cI_Knzvc-0000012345.m4a"]], "its sound's file");
+    CHECK([lines isKept:@"JE4cI_Knzvc" start:12.345] && ![lines isKept:@"JE4cI_Knzvc" start:13], "is it kept");
+    CHECK([lines keepText:@"Привет, друзья!" before:nil video:@"JE4cI_Knzvc" title:@"x" start:12.345 end:14.5 today:day problem:&problem] == nil &&
+          Has(problem, @"kept already"), "the same line twice: %s", [problem UTF8String]);
+    CHECK([lines keepText:@"" before:nil video:@"JE4cI_Knzvc" title:@"x" start:20 end:21 today:day problem:&problem] == nil &&
+          Has(problem, @"no line"), "an empty line");
+    CHECK([[lines dueOn:day] count] == 0, "nothing due the day it's kept");
+
+    // Ten a day.
+    for (int i = 1; i < 10; i++)
+    {
+        NSString *text = [NSString stringWithFormat:@"Line %d", i];
+        CHECK([lines keepText:text before:nil video:@"JE4cI_Knzvc" title:@"t" start:100 + i end:101 + i today:day problem:NULL] != nil,
+              "line %d kept", i);
+    }
+    CHECK([lines keptOn:day] == 10, "ten today");
+    CHECK([lines keepText:@"Eleven" before:nil video:@"JE4cI_Knzvc" title:@"t" start:200 end:201 today:day problem:&problem] == nil &&
+          Has(problem, @"10 lines kept today"), "the eleventh waits for tomorrow: %s", [problem UTF8String]);
+    RSKeptLine *b = [lines keepText:@"Tomorrow's" before:nil video:@"abcdefghijk" title:@"t" start:200 end:201 today:day + 1 problem:NULL];
+    CHECK(b != nil, "and tomorrow it's kept");
+
+    NSArray *due = [lines dueOn:day + 1];
+    CHECK([due count] == 10 && [due objectAtIndex:0] == a, "the next day, the ten are due, in the order kept");
+
+    // "Knew it" every time: 3, 7, 16, 35, 75 days, then put away.
+    long d = day + 1;
+    long expect[] = { 3, 7, 16, 35, 75 };
+    for (int i = 0; i < 5; i++) {
+        [lines answer:a knew:YES today:d];
+        CHECK([a due] == d + expect[i] && [a step] == (NSUInteger)i + 1 && ![a putAway], "knew it %d: back in %ld days", i + 1, expect[i]);
+        d = [a due];
+    }
+    [lines answer:a knew:YES today:d];
+    CHECK([a putAway], "known: put away");
+    CHECK(![[lines dueOn:d + 1000] containsObject:a], "and never due again");
+
+    // "Not yet": the next day, from the start; put away after six.
+    RSKeptLine *c = [due objectAtIndex:1];
+    [lines answer:c knew:YES today:day + 1];
+    [lines answer:c knew:NO today:day + 4];
+    CHECK([c step] == 0 && [c lapses] == 1 && [c due] == day + 5, "not yet: tomorrow, from the start");
+    for (int i = 2; i <= 6; i++) [lines answer:c knew:NO today:day + 4 + i];
+    CHECK([c lapses] == 6 && [c putAway], "six times not yet: put away");
+    RSKeptLine *e = [due objectAtIndex:2];
+    [lines putAway:e];
+    CHECK([e putAway] && ![[lines dueOn:day + 30] containsObject:e], "put away by hand");
+    CHECK([[lines linesFromVideo:@"abcdefghijk"] count] == 1 && [[lines linesFromVideo:@"JE4cI_Knzvc"] count] == 10, "lines by video");
+
+    // Saved and read back, the same.
+    CHECK([lines save], "saved");
+    RSLines *read = [[[RSLines alloc] initWithFolder:folder] autorelease];
+    CHECK([[read lines] count] == 11, "read back: %lu", (unsigned long)[[read lines] count]);
+    RSKeptLine *a2 = [[read lines] objectAtIndex:0], *c2 = [[read lines] objectAtIndex:1];
+    CHECK([[a2 text] isEqualToString:@"Привет, друзья!"] && [[a2 before] isEqualToString:@"Сегодня"] && [[a2 title] isEqualToString:@"She Cut Her Hair"] &&
+          fabs([a2 start] - 12.345) < 1e-9 && [a2 end] == 14.5 && [a2 putAway] && [a2 step] == 6 && [a2 kept] == day,
+          "a line read back");
+    CHECK([c2 lapses] == 6 && [c2 putAway] && [[[read lines] objectAtIndex:3] before] == nil, "another, and no context is nil");
+
+    // Thirty a day, then the rest the next day.
+    NSString *many = Temp(@"lines-many");
+    [[NSFileManager defaultManager] removeItemAtPath:many error:NULL];
+    RSLines *m = [[[RSLines alloc] initWithFolder:many] autorelease];
+    for (int i = 0; i < 40; i++)
+        [m keepText:[NSString stringWithFormat:@"L%d", i] before:nil video:@"vid" title:@"t" start:i end:i + 0.5 today:day - 10 + i / 10 problem:NULL];
+    NSArray *today = [m dueOn:day];
+    CHECK([today count] == 30 && [[[today objectAtIndex:0] text] isEqualToString:@"L0"], "thirty at most: %lu", (unsigned long)[today count]);
+    for (int i = 0; i < 12; i++) [m answer:[today objectAtIndex:i] knew:YES today:day];
+    [m save];
+    RSLines *m2 = [[[RSLines alloc] initWithFolder:many] autorelease];
+    CHECK([[m2 dueOn:day] count] == 18, "after twelve heard, eighteen more today (also after a reload): %lu", (unsigned long)[[m2 dueOn:day] count]);
+    CHECK([[m2 dueOn:day + 1] count] == 28, "the next day the rest are due: %lu", (unsigned long)[[m2 dueOn:day + 1] count]);
+
+    // A damaged file: the readable lines stay.
+    NSDictionary *bad = [NSDictionary dictionaryWithObject:[NSArray arrayWithObjects:@"junk",
+        [NSDictionary dictionaryWithObjectsAndKeys:@"k", @"key", @"v", @"video", nil],
+        [NSDictionary dictionaryWithObjectsAndKeys:@"k2", @"key", @"v", @"video", @"Hi", @"text", nil], nil] forKey:@"lines"];
+    NSString *damaged = Temp(@"lines-damaged");
+    [[NSFileManager defaultManager] createDirectoryAtPath:damaged withIntermediateDirectories:YES attributes:nil error:NULL];
+    [bad writeToFile:[damaged stringByAppendingPathComponent:@"Lines.plist"] atomically:YES];
+    RSLines *dl = [[[RSLines alloc] initWithFolder:damaged] autorelease];
+    CHECK([[dl lines] count] == 1 && [[[[dl lines] objectAtIndex:0] text] isEqualToString:@"Hi"], "damaged entries skipped");
+}
+
+// ---- Cutting a line's sound ------------------------------------------------
+
+// Four seconds of a 440 Hz tone, as a WAV file.
+static NSString *ToneFile(NSString *path, double seconds)
+{
+    int rate = 22050, samples = (int)(rate * seconds);
+    NSMutableData *d = [NSMutableData data];
+    uint32_t u32; uint16_t u16;
+    [d appendBytes:"RIFF" length:4]; u32 = 36 + samples * 2; [d appendBytes:&u32 length:4];
+    [d appendBytes:"WAVEfmt " length:8]; u32 = 16; [d appendBytes:&u32 length:4];
+    u16 = 1; [d appendBytes:&u16 length:2]; u16 = 1; [d appendBytes:&u16 length:2];
+    u32 = rate; [d appendBytes:&u32 length:4]; u32 = rate * 2; [d appendBytes:&u32 length:4];
+    u16 = 2; [d appendBytes:&u16 length:2]; u16 = 16; [d appendBytes:&u16 length:2];
+    [d appendBytes:"data" length:4]; u32 = samples * 2; [d appendBytes:&u32 length:4];
+    for (int i = 0; i < samples; i++) {
+        int16_t v = (int16_t)(8000 * sin(2 * M_PI * 440 * i / rate));
+        [d appendBytes:&v length:2];
+    }
+    [d writeToFile:path atomically:YES];
+    return path;
+}
+
+static void TestClip(void)
+{
+    NSString *tone = ToneFile(Temp(@"tone.wav"), 4);
+    CHECK(fabs(RSMediaDuration(tone) - 4) < 0.05, "the tone is 4 seconds: %.3f", RSMediaDuration(tone));
+    NSString *out = Temp(@"clip.m4a"), *problem = nil;
+    CHECK(RSCutClipNow(tone, 1.0, 2.0, out, &problem), "cut: %s", [problem UTF8String]);
+    double d = RSMediaDuration(out);
+    CHECK(fabs(d - (1.0 + RSClipLeadIn + RSClipTail)) < 0.1, "a little before and after the line: %.3f s", d);
+    CHECK(![[NSFileManager defaultManager] fileExistsAtPath:Temp(@"clip.partial.m4a")], "no partial file left");
+
+    // At the very end: cut short at the end of the sound.
+    CHECK(RSCutClipNow(tone, 3.5, 4.0, Temp(@"end.m4a"), &problem) && fabs(RSMediaDuration(Temp(@"end.m4a")) - 0.65) < 0.1,
+          "at the end: %.3f s", RSMediaDuration(Temp(@"end.m4a")));
+    CHECK(!RSCutClipNow(Temp(@"missing.mp4"), 1, 2, Temp(@"x.m4a"), &problem) && Has(problem, @"no sound"), "no video: %s", [problem UTF8String]);
+    [@"not a movie" writeToFile:Temp(@"text.mp4") atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    CHECK(!RSCutClipNow(Temp(@"text.mp4"), 1, 2, Temp(@"y.m4a"), &problem) && ![[NSFileManager defaultManager] fileExistsAtPath:Temp(@"y.m4a")],
+          "not a movie: %s", [problem UTF8String]);
+    CHECK(!RSCutClipNow(tone, 5, 6, Temp(@"z.m4a"), &problem) && Has(problem, @"too short"), "past the end: %s", [problem UTF8String]);
 }
 
 // ---- git ---------------------------------------------------------------------
@@ -799,6 +973,8 @@ int main(int argc, const char *argv[])
         TestRealKey(fixtures);
         TestSubtitles(fixtures);
         TestLibrary();
+        TestLines();
+        TestClip();
         TestCommandLines();
         TestReports();
         TestSyncMessages();

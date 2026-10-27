@@ -5,6 +5,8 @@
 #import "RSSync.h"
 #import "RSReport.h"
 #import "RSDate.h"
+#import "RSLines.h"
+#import "RSClip.h"
 
 static const NSTimeInterval RSRefreshEvery = 60 * 60;
 static const NSTimeInterval RSDayCheckEvery = 5 * 60;
@@ -35,6 +37,8 @@ static NSString *RSTimeText(time_t t)
     RSLibrary *_library;
     RSDownloader *_downloader;
     RSPlayer *_player;
+    RSLines *_lines;
+    RSReview *_review;
     NSString *_studyFolder;
     NSMutableDictionary *_progress;     // id -> NSNumber, while downloading
     NSMutableDictionary *_problems;     // id -> why the last try failed
@@ -60,6 +64,7 @@ static NSString *RSTimeText(time_t t)
     _thumbnails = [[NSMutableDictionary alloc] init];
     _downloader = [[RSDownloader alloc] initWithLibrary:_library tools:[RSTools bundled]];
     [_downloader setDelegate:self];
+    _lines = [[RSLines alloc] initWithFolder:[[_library folder] stringByAppendingPathComponent:@"Lines"]];
     return self;
 }
 
@@ -74,6 +79,9 @@ static NSString *RSTimeText(time_t t)
     [_statusBar release];
     [_library release];
     [_player release];
+    [_review setDelegate:nil];
+    [_review release];
+    [_lines release];
     [_studyFolder release];
     [_progress release];
     [_problems release];
@@ -88,6 +96,8 @@ static NSString *RSTimeText(time_t t)
 - (RSShelfView *)shelfView { return _shelfView; }
 - (RSPlayer *)player { return _player; }
 - (RSLibrary *)library { return _library; }
+- (RSLines *)lines { return _lines; }
+- (RSReview *)review { return _review; }
 
 // ---- Launch -------------------------------------------------------------------
 
@@ -120,8 +130,10 @@ static NSString *RSTimeText(time_t t)
 - (void)applicationWillTerminate:(NSNotification *)n
 {
     [_player close];
+    [_review close];
     [_downloader cancel];
     [_library save];
+    [_lines save];
 }
 
 - (void)showWindow
@@ -348,6 +360,8 @@ static NSString *RSTimeText(time_t t)
         [_shelfView setTitle:@"This week’s shelf"];
         NSMutableString *sub = [NSMutableString stringWithFormat:@"From %@, chosen by Claude.", RSDayText([shelf start])];
         if ([_library pending]) [sub appendFormat:@" Next shelf from %@.", RSDayText([[_library pending] start])];
+        NSUInteger due = [[_lines dueOn:RSToday()] count];
+        if (due) [sub appendFormat:@" %lu line%s to hear again (⌘L).", (unsigned long)due, due == 1 ? "" : "s"];
         [_shelfView setSubtitle:sub];
     }
     [_shelfView setEmptyTitle:@"No shelf yet"];
@@ -430,6 +444,33 @@ static NSString *RSTimeText(time_t t)
     [self reloadRows];
 }
 
+- (void)player:(RSPlayer *)player helped:(RSHelp)kind
+{
+    [_library countHelp:kind for:[player identifier]];
+    [_library save];
+    _watchChanged = YES;
+}
+
+- (NSString *)player:(RSPlayer *)player keepLine:(RSLine *)line before:(RSLine *)before
+{
+    NSString *identifier = [player identifier];
+    NSString *problem = nil;
+    RSKeptLine *kept = [_lines keepText:[line text] before:[before text] video:identifier
+                                  title:[[[_library current] videoWithIdentifier:identifier] title]
+                                  start:[line start] end:[line end] today:RSToday() problem:&problem];
+    if (kept == nil) return problem;
+    [_lines save];
+    [_library countHelp:RSHelpKept for:identifier];
+    [_library save];
+    _watchChanged = YES;
+    // The sound is cut in the background; without it the line is still kept.
+    RSCutClip([_library moviePath:identifier], [line start], [line end], [_lines soundPath:kept], ^(BOOL ok, NSString *why) {
+        if (!ok) NSLog(@"Russian Shelf: %@", why);
+    });
+    [self reloadRows];
+    return @"Kept, with its sound. It comes back tomorrow (⌘L).";
+}
+
 - (void)playerClosed:(RSPlayer *)player
 {
     if (player != _player) return;
@@ -463,7 +504,7 @@ static NSString *RSTimeText(time_t t)
     for (NSString *name in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:outbox error:NULL])
         if ([name hasPrefix:prefix]) [[NSFileManager defaultManager] removeItemAtPath:[outbox stringByAppendingPathComponent:name] error:NULL];
     time_t now = RSNowTime();
-    [RSReportText(shelf, _library, now) writeToFile:[outbox stringByAppendingPathComponent:RSReportName(shelf, now)]
+    [RSReportText(shelf, _library, _lines, now) writeToFile:[outbox stringByAppendingPathComponent:RSReportName(shelf, now)]
                                          atomically:YES encoding:NSUTF8StringEncoding error:NULL];
 }
 
@@ -506,6 +547,32 @@ static NSString *RSTimeText(time_t t)
     });
 }
 
+// ---- Lines to hear again ----------------------------------------------------------
+
+- (RSReview *)showLines
+{
+    if (_review == nil) {
+        _review = [[RSReview alloc] initWithLines:_lines today:RSToday()];
+        [_review setDelegate:self];
+    }
+    [_review show];
+    return _review;
+}
+
+- (void)showLines:(id)sender
+{
+    [self showLines];
+}
+
+- (void)reviewClosed:(RSReview *)review
+{
+    if (review != _review) return;
+    [_review setDelegate:nil];
+    [_review autorelease];
+    _review = nil;
+    [self reloadRows];
+}
+
 // ---- Menus --------------------------------------------------------------------------
 
 static NSMenuItem *RSItem(NSMenu *menu, NSString *title, SEL action, NSString *key, NSUInteger mask, id target)
@@ -538,6 +605,8 @@ static NSString *RSKey(unichar c)
     NSMenu *shelf = [[[NSMenu alloc] initWithTitle:@"Shelf"] autorelease];
     RSItem(shelf, @"Show the Shelf", @selector(showShelf:), @"1", cmd, self);
     RSItem(shelf, @"Look for a New Shelf", @selector(refresh:), @"r", cmd, self);
+    [shelf addItem:[NSMenuItem separatorItem]];
+    RSItem(shelf, @"Lines to Hear Again", @selector(showLines:), @"l", cmd, self);
 
     // Shown for the keys; the player window takes them itself, before
     // AVPlayerView does.
@@ -549,6 +618,9 @@ static NSString *RSKey(unichar c)
     [play addItem:[NSMenuItem separatorItem]];
     RSItem(play, @"Show This Line", @selector(reveal:), RSKey(NSDownArrowFunctionKey), 0, self);
     RSItem(play, @"Hear This Line Again", @selector(replay:), RSKey(NSUpArrowFunctionKey), 0, self);
+    RSItem(play, @"Loop This Line", @selector(loop:), @"l", 0, self);
+    RSItem(play, @"Slower", @selector(slower:), @"-", 0, self);
+    RSItem(play, @"Keep This Line", @selector(keep:), @"k", 0, self);
     [play addItem:[NSMenuItem separatorItem]];
     RSItem(play, @"Subtitles Stay On", @selector(subtitles:), @"s", 0, self);
     RSItem(play, @"Transcript", @selector(transcript:), @"t", 0, self);
@@ -578,7 +650,9 @@ static NSString *RSKey(unichar c)
 {
     SEL a = [item action];
     if (a == @selector(refresh:)) return !_refreshing;
-    if (a == @selector(showShelf:)) return YES;
+    if (a == @selector(showShelf:) || a == @selector(showLines:)) return YES;
+    if (a == @selector(loop:)) [item setState:[_player looping] ? NSOnState : NSOffState];
+    if (a == @selector(slower:)) [item setState:[_player slower] ? NSOnState : NSOffState];
     if (a == @selector(subtitles:)) [item setState:[_player subtitlesOn] ? NSOnState : NSOffState];
     if (a == @selector(transcript:)) [item setState:[_player transcriptShown] ? NSOnState : NSOffState];
     if (a == @selector(fullScreen:)) [item setState:[_player fullScreen] ? NSOnState : NSOffState];
@@ -594,5 +668,8 @@ static NSString *RSKey(unichar c)
 - (void)subtitles:(id)sender  { [_player toggleSubtitles]; }
 - (void)transcript:(id)sender { [_player toggleTranscript]; }
 - (void)fullScreen:(id)sender { [_player toggleFullScreen]; }
+- (void)loop:(id)sender       { [_player toggleLoop]; }
+- (void)slower:(id)sender     { [_player toggleSlower]; }
+- (void)keep:(id)sender       { [_player keepLine]; }
 
 @end
