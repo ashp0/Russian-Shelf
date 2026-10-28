@@ -71,9 +71,15 @@ typedef enum {
 // ---- Lines to hear again (RSReview) ----
 + (NSSize)reviewWindowSize;
 // An index card on the bookcase's back, the keys along the bottom. `text`
-// nil: the line is still hidden. `message` is for when there's no line up.
+// nil: the line is still hidden. `prompt`: the owner's own words, to say in
+// Russian (then `text` is nil). `message` is for when there's no line up.
+// `meaningRow`: leave room at the card's foot for the meaning field.
 + (void)drawReviewIn:(NSRect)rect heading:(NSString *)heading source:(NSString *)source before:(NSString *)before
-                text:(NSString *)text message:(NSString *)message note:(NSString *)note keys:(NSArray *)keys;
+                text:(NSString *)text prompt:(NSString *)prompt message:(NSString *)message note:(NSString *)note
+          meaningRow:(BOOL)meaningRow keys:(NSArray *)keys;
+// Where the meaning field goes on the card, and how it looks.
++ (NSRect)reviewMeaningRectIn:(NSRect)rect note:(BOOL)note;
++ (void)styleMeaningField:(NSTextField *)field;
 
 // ---- Shared ----
 + (NSString *)clock:(double)seconds;                            // "4:10"

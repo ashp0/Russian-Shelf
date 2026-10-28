@@ -706,21 +706,23 @@ static void TestLines(void)
           Has(problem, @"no line"), "an empty line");
     CHECK([[lines dueOn:day] count] == 0, "nothing due the day it's kept");
 
-    // Ten a day.
-    for (int i = 1; i < 10; i++)
+    // Fifteen a day.
+    CHECK(RSKeepPerDay == 15 && RSHearPerDay == 60 && RSWaitingBrake == 45, "the limits: 15 kept, 60 heard, 45 waiting");
+    for (int i = 1; i < (int)RSKeepPerDay; i++)
     {
         NSString *text = [NSString stringWithFormat:@"Line %d", i];
         CHECK([lines keepText:text before:nil video:@"JE4cI_Knzvc" title:@"t" start:100 + i end:101 + i today:day problem:NULL] != nil,
               "line %d kept", i);
     }
-    CHECK([lines keptOn:day] == 10, "ten today");
-    CHECK([lines keepText:@"Eleven" before:nil video:@"JE4cI_Knzvc" title:@"t" start:200 end:201 today:day problem:&problem] == nil &&
-          Has(problem, @"10 lines kept today"), "the eleventh waits for tomorrow: %s", [problem UTF8String]);
+    CHECK([lines keptOn:day] == RSKeepPerDay, "fifteen today");
+    CHECK([lines keepText:@"Sixteen" before:nil video:@"JE4cI_Knzvc" title:@"t" start:200 end:201 today:day problem:&problem] == nil &&
+          Has(problem, @"15 lines kept today"), "the sixteenth waits for tomorrow: %s", [problem UTF8String]);
     RSKeptLine *b = [lines keepText:@"Tomorrow's" before:nil video:@"abcdefghijk" title:@"t" start:200 end:201 today:day + 1 problem:NULL];
     CHECK(b != nil, "and tomorrow it's kept");
 
     NSArray *due = [lines dueOn:day + 1];
-    CHECK([due count] == 10 && [due objectAtIndex:0] == a, "the next day, the ten are due, in the order kept");
+    CHECK([due count] == RSKeepPerDay && [due objectAtIndex:0] == a, "the next day, the fifteen are due, in the order kept");
+    CHECK([lines waitingOn:day + 1] == RSKeepPerDay && [lines waitingOn:day] == 0, "waiting");
 
     // "Knew it" every time: 3, 7, 16, 35, 75 days, then put away.
     long d = day + 1;
@@ -744,7 +746,7 @@ static void TestLines(void)
     RSKeptLine *e = [due objectAtIndex:2];
     [lines putAway:e];
     CHECK([e putAway] && ![[lines dueOn:day + 30] containsObject:e], "put away by hand");
-    CHECK([[lines linesFromVideo:@"abcdefghijk"] count] == 1 && [[lines linesFromVideo:@"JE4cI_Knzvc"] count] == 10, "lines by video");
+    CHECK([[lines linesFromVideo:@"abcdefghijk"] count] == 1 && [[lines linesFromVideo:@"JE4cI_Knzvc"] count] == RSKeepPerDay, "lines by video");
 
     // Not yet today: heard once more today, also after the window is closed.
     RSKeptLine *f = [due objectAtIndex:3], *g = [due objectAtIndex:4];
@@ -758,7 +760,7 @@ static void TestLines(void)
     // Saved and read back, the same.
     CHECK([lines save], "saved");
     RSLines *read = [[[RSLines alloc] initWithFolder:folder] autorelease];
-    CHECK([[read lines] count] == 11, "read back: %lu", (unsigned long)[[read lines] count]);
+    CHECK([[read lines] count] == RSKeepPerDay + 1, "read back: %lu", (unsigned long)[[read lines] count]);
     RSKeptLine *a2 = [[read lines] objectAtIndex:0], *c2 = [[read lines] objectAtIndex:1];
     CHECK([[a2 text] isEqualToString:@"Привет, друзья!"] && [[a2 before] isEqualToString:@"Сегодня"] && [[a2 title] isEqualToString:@"She Cut Her Hair"] &&
           fabs([a2 start] - 12.345) < 1e-9 && [a2 end] == 14.5 && [a2 putAway] && [a2 step] == 6 && [a2 kept] == day,
@@ -767,19 +769,47 @@ static void TestLines(void)
     RSKeptLine *f2 = [[read lines] objectAtIndex:3];
     CHECK([f2 heard] == day + 1 && ![f2 knewLast] && [[read notYetOn:day + 1] count] == 1, "the last answer read back");
 
-    // Thirty a day, then the rest the next day.
+    // Sixty a day, then the rest the next day; and no keeping while 45 wait.
     NSString *many = Temp(@"lines-many");
     [[NSFileManager defaultManager] removeItemAtPath:many error:NULL];
+    [[NSFileManager defaultManager] createDirectoryAtPath:many withIntermediateDirectories:YES attributes:nil error:NULL];
+    NSMutableArray *seventy = [NSMutableArray array];
+    for (int i = 0; i < 70; i++)
+        [seventy addObject:[NSDictionary dictionaryWithObjectsAndKeys:[NSString stringWithFormat:@"vid-%03d", i], @"key", @"vid", @"video",
+            [NSString stringWithFormat:@"L%d", i], @"text", [NSNumber numberWithLong:day - 2], @"kept",
+            [NSNumber numberWithLong:day - 1 - (i < 5 ? 1 : 0)], @"due", nil]];
+    [[NSDictionary dictionaryWithObject:seventy forKey:@"lines"] writeToFile:[many stringByAppendingPathComponent:@"Lines.plist"] atomically:YES];
     RSLines *m = [[[RSLines alloc] initWithFolder:many] autorelease];
-    for (int i = 0; i < 40; i++)
-        [m keepText:[NSString stringWithFormat:@"L%d", i] before:nil video:@"vid" title:@"t" start:i end:i + 0.5 today:day - 10 + i / 10 problem:NULL];
     NSArray *today = [m dueOn:day];
-    CHECK([today count] == 30 && [[[today objectAtIndex:0] text] isEqualToString:@"L0"], "thirty at most: %lu", (unsigned long)[today count]);
-    for (int i = 0; i < 12; i++) [m answer:[today objectAtIndex:i] knew:YES today:day];
+    CHECK([today count] == 60 && [[[today objectAtIndex:0] text] isEqualToString:@"L0"], "sixty at most: %lu", (unsigned long)[today count]);
+    CHECK([m waitingOn:day] == 70, "seventy waiting");
+    CHECK([m keepText:@"More" before:nil video:@"vid" title:@"t" start:500 end:501 today:day problem:&problem] == nil &&
+          Has(problem, @"70 lines are waiting"), "no keeping while 45 or more wait: %s", [problem UTF8String]);
+    for (int i = 0; i < 30; i++) [m answer:[today objectAtIndex:i] knew:YES today:day];
     [m save];
     RSLines *m2 = [[[RSLines alloc] initWithFolder:many] autorelease];
-    CHECK([[m2 dueOn:day] count] == 18, "after twelve heard, eighteen more today (also after a reload): %lu", (unsigned long)[[m2 dueOn:day] count]);
-    CHECK([[m2 dueOn:day + 1] count] == 28, "the next day the rest are due: %lu", (unsigned long)[[m2 dueOn:day + 1] count]);
+    CHECK([[m2 dueOn:day] count] == 30, "after thirty heard, thirty more today (also after a reload): %lu", (unsigned long)[[m2 dueOn:day] count]);
+    CHECK([[m2 dueOn:day + 1] count] == 40, "the next day the rest are due: %lu", (unsigned long)[[m2 dueOn:day + 1] count]);
+    CHECK([m2 keepText:@"More" before:nil video:@"vid" title:@"t" start:500 end:501 today:day problem:&problem] != nil,
+          "with 40 waiting, keeping works again: %s", [problem UTF8String]);
+
+    // Your words: then the line comes up both ways, turn about.
+    RSKeptLine *w = [m2 keepText:@"Мне кажется, что он прав." before:nil video:@"vid" title:@"t" start:600 end:602 today:day problem:NULL];
+    CHECK(![m2 asksToSay:w], "no meaning: always listen");
+    [w setStep:1];
+    CHECK(![m2 asksToSay:w], "no meaning, even later");
+    [w setMeaning:@"   "];
+    CHECK(![m2 asksToSay:w], "a blank meaning is none");
+    [w setMeaning:@"I think he's right."];
+    [w setStep:0];
+    CHECK(![m2 asksToSay:w], "the first time: listen");
+    BOOL turns[] = { NO, YES, NO, YES, NO, YES };
+    BOOL alternates = YES;
+    for (NSUInteger st = 0; st < 6; st++) { [w setStep:st]; if ([m2 asksToSay:w] != turns[st]) alternates = NO; }
+    CHECK(alternates, "after the first knew-it: say, listen, say, listen, say");
+    [m2 save];
+    RSLines *m3 = [[[RSLines alloc] initWithFolder:many] autorelease];
+    CHECK([[[[m3 lines] lastObject] meaning] isEqualToString:@"I think he's right."], "the meaning is saved");
 
     // A damaged file: the readable lines stay.
     NSDictionary *bad = [NSDictionary dictionaryWithObject:[NSArray arrayWithObjects:@"junk",

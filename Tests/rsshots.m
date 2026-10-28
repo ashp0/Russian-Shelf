@@ -283,12 +283,26 @@ int main(int argc, const char *argv[])
         ShootBoth([review window], out, @"lines");
         [review showLine];
         ShootBoth([review window], out, @"lines-shown");
+        [review setMeaning:@"She cut off her hair to save her husband."];
+        ShootBoth([review window], out, @"lines-meaning");
         [review answer:YES];
         printf("  next     %s\n", [[review visibleText] UTF8String]);
         ShootBoth([review window], out, @"lines-nosound");
         [review answer:YES];
         ShootBoth([review window], out, @"lines-done");
         [review close];
+        // The same line, later: with the owner's words it comes up as "say it".
+        [first setStep:1];
+        [first setDue:RSToday()];
+        [lines save];
+        RSReview *say = [[[RSReview alloc] initWithLines:lines today:RSToday()] autorelease];
+        [say setSilentForTesting];
+        [[say window] orderOut:nil];
+        printf("  say      state %d: %s\n", (int)[say state], [[say visibleText] UTF8String]);
+        ShootBoth([say window], out, @"lines-say");
+        [say showLine];
+        ShootBoth([say window], out, @"lines-say-shown");
+        [say close];
         [c reloadRows];
         ShootBoth([c window], out, @"shelf-after-lines");
 

@@ -1,8 +1,9 @@
 #import "RSLines.h"
 #include <math.h>
 
-const NSUInteger RSKeepPerDay = 10;
-const NSUInteger RSHearPerDay = 30;
+const NSUInteger RSKeepPerDay = 15;
+const NSUInteger RSHearPerDay = 60;
+const NSUInteger RSWaitingBrake = 45;
 const NSUInteger RSPutAwayAfter = 6;
 
 static NSString *const RSLinesFile = @"Lines.plist";
@@ -22,6 +23,7 @@ long RSLineGap(NSUInteger step)
     [_title release];
     [_text release];
     [_before release];
+    [_meaning release];
     [super dealloc];
 }
 
@@ -35,6 +37,7 @@ long RSLineGap(NSUInteger step)
         [NSNumber numberWithBool:_putAway], @"putAway",
         [NSNumber numberWithLong:_heard], @"heard", [NSNumber numberWithBool:_knewLast], @"knewLast", nil];
     if (_before) [d setObject:_before forKey:@"before"];
+    if ([_meaning length]) [d setObject:_meaning forKey:@"meaning"];
     return d;
 }
 
@@ -50,6 +53,7 @@ long RSLineGap(NSUInteger step)
     [line setText:text];
     if ([[d objectForKey:@"title"] isKindOfClass:[NSString class]]) [line setTitle:[d objectForKey:@"title"]];
     if ([[d objectForKey:@"before"] isKindOfClass:[NSString class]]) [line setBefore:[d objectForKey:@"before"]];
+    if ([[d objectForKey:@"meaning"] isKindOfClass:[NSString class]]) [line setMeaning:[d objectForKey:@"meaning"]];
     [line setStart:[[d objectForKey:@"start"] doubleValue]];
     [line setEnd:[[d objectForKey:@"end"] doubleValue]];
     [line setKept:[[d objectForKey:@"kept"] longValue]];
@@ -144,6 +148,8 @@ static NSString *RSLineKey(NSString *video, double start)
     else if ([self isKept:video start:start]) why = @"This line is kept already.";
     else if ([self keptOn:today] >= RSKeepPerDay)
         why = [NSString stringWithFormat:@"%lu lines kept today: that’s plenty. More tomorrow.", (unsigned long)RSKeepPerDay];
+    else if ([self waitingOn:today] >= RSWaitingBrake)
+        why = [NSString stringWithFormat:@"%lu lines are waiting to be heard again (⌘L). Those first.", (unsigned long)[self waitingOn:today]];
     if (why) {
         if (problem) *problem = why;
         return nil;
@@ -180,6 +186,20 @@ static NSString *RSLineKey(NSString *video, double start)
     NSUInteger heard = [self heardOn:today];
     NSUInteger room = heard >= RSHearPerDay ? 0 : RSHearPerDay - heard;
     return [sorted count] > room ? [sorted subarrayWithRange:NSMakeRange(0, room)] : sorted;
+}
+
+- (NSUInteger)waitingOn:(long)today
+{
+    NSUInteger n = 0;
+    for (RSKeptLine *line in _lines)
+        if (![line putAway] && [line due] <= today) n++;
+    return n;
+}
+
+- (BOOL)asksToSay:(RSKeptLine *)line
+{
+    return [[[line meaning] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] length] > 0 &&
+           [line step] % 2 == 1;
 }
 
 - (void)answer:(RSKeptLine *)line knew:(BOOL)knew today:(long)today

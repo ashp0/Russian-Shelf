@@ -6,10 +6,15 @@
 // In the player, K keeps the line just said. Its sound is cut from the video
 // (RSClip) into Lines/, so it stays when the video goes. The Lines window
 // plays each line due today, sound first: the text only when asked for, then
-// "not yet" or "knew it".
+// "not yet" or "knew it". Under the shown line you can write what it means,
+// in your own words. From then on the line comes up both ways, turn about:
+// its sound (understand it) and your words (say it in Russian, then hear the
+// speaker): one trains the ear, the other the speaking (research: recalling
+// the form from the meaning builds productive knowledge).
 //
-//   - At most ten lines kept a day, and thirty heard again a day: a small
-//     dose, never a backlog that eats the listening.
+//   - At most fifteen lines kept a day and sixty heard again a day (about
+//     twenty minutes), and no keeping while forty-five are already waiting:
+//     never a backlog that eats the listening.
 //   - A new line comes back the next day. Each "knew it" waits longer: 3,
 //     7, 16, 35, then 75 days; after that it's known and put away.
 //   - "Not yet" brings it back the next day, from the start. A line not
@@ -23,8 +28,9 @@
 
 #import <Foundation/Foundation.h>
 
-extern const NSUInteger RSKeepPerDay;          // 10
-extern const NSUInteger RSHearPerDay;          // 30
+extern const NSUInteger RSKeepPerDay;          // 15
+extern const NSUInteger RSHearPerDay;          // 60
+extern const NSUInteger RSWaitingBrake;        // 45 waiting: keep no more
 extern const NSUInteger RSPutAwayAfter;        // 6 times "not yet"
 
 @interface RSKeptLine : NSObject
@@ -33,6 +39,7 @@ extern const NSUInteger RSPutAwayAfter;        // 6 times "not yet"
 @property (nonatomic) double start, end;                // where it is in the video (seconds)
 @property (nonatomic, copy) NSString *text;             // the line (may hold a line break)
 @property (nonatomic, copy) NSString *before;           // the line before it, for context, or nil
+@property (nonatomic, copy) NSString *meaning;          // what it means, in the owner's words, or nil
 @property (nonatomic) long kept, due;                   // days (RSDate)
 @property (nonatomic) NSUInteger step, lapses;          // "knew it"s in a row; "not yet"s in all
 @property (nonatomic) BOOL putAway;                     // known, or not for now
@@ -56,6 +63,11 @@ extern const NSUInteger RSPutAwayAfter;        // 6 times "not yet"
 // Today's lines to hear again: those due by today, oldest due first, as
 // many as today still allows.
 - (NSArray *)dueOn:(long)today;
+// How many are due by today and not put away, whatever today allows.
+- (NSUInteger)waitingOn:(long)today;
+// Whether this time it's "say it from your words" rather than "listen": only
+// for a line with a meaning, every other time after the first "knew it".
+- (BOOL)asksToSay:(RSKeptLine *)line;
 // Lines answered "not yet" today and not put away: heard once more before
 // today's are done (not counted again, not moved again).
 - (NSArray *)notYetOn:(long)today;

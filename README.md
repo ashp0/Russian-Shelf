@@ -75,7 +75,10 @@ The keys follow what the research says trains the ear for fast speech
 (`dendron-autopilot/reports/r1-research.md`): hear the line again (↑) a
 time or two and try to say what it was; then show it (↓) and compare; slow
 it down (−) only after a try at full speed, and go back to full speed;
-loop it (L) and say it along in the pause. Keep (K) the few worth knowing.
+loop it (L) and say the whole sentence back in the pause (for someone who
+speaks in short phrases, saying native sentences whole is practice in
+building them). Keep (K) the few worth knowing: a new verb, a chunk you'd like
+to say yourself.
 
 ### Lines to hear again
 
@@ -85,9 +88,10 @@ many.
 
 | Key | |
 | --- | --- |
-| Space | Hear it again (it plays by itself when it comes up) |
+| Space | Hear it again (it plays by itself when it comes up). On a "say it" card: hear it and see it |
 | − | Three-quarter speed, and full speed again |
 | ↓ | Show the line, and the one before it for context |
+| Tab | **Write what it means**, in your own words, under the shown line. Return keeps it, Esc leaves it as it was |
 | ← | **Not yet.** Back tomorrow, from the start, and once more before today's are done |
 | → | **Knew it.** Back later |
 | ⌫ | Put it away for good |
@@ -96,11 +100,23 @@ many.
 Sound first, so it's the ear that's tested, not reading. A line kept today
 comes back tomorrow; each "knew it" waits longer: 3, 7, 16, 35, then 75
 days, and after that it's known and put away. Six "not yet"s put it away
-too: a line that hard is better met again in a story. At most **ten lines
-kept a day** and **thirty heard again a day**, so the review stays a few
-minutes and never grows into a backlog that eats the listening. Nothing is
-counted, scored or kept in a row on screen. When today's are done it says
-so and stops.
+too: a line that hard is better met again in a story.
+
+**Both ways, once it has your words.** The first time a line is shown, write
+what it means (Tab). From then on it comes up turn about: as its sound
+(understand it) and, every other time after the first "knew it", as **your
+words in blue ink: say it in Russian**, aloud, as a whole sentence; then ↓
+plays the speaker and shows the line, to compare. Hearing and understanding
+trains the ear; saying it from the meaning trains the speaking (recalling the
+Russian from the meaning builds what you can say, not just what you
+recognise). A line without your words is only ever heard.
+
+At most **fifteen lines kept a day** and **sixty heard again a day** (about
+twenty minutes), and K keeps nothing while **forty-five are already waiting**:
+the review never grows into a backlog that eats the listening. These sizes
+are for an A2–B1 learner adding about fifteen items a day
+(`dendron-autopilot/reports/r1-research.md`). Nothing is counted, scored or
+kept in a row on screen. When today's are done it says so and stops.
 
 A kept line's sound is cut from the video when you keep it (the line, from
 0.15 s before to 0.35 s after), so it stays when the video leaves the shelf.

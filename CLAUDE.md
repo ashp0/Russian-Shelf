@@ -6,8 +6,11 @@ stories are the spine). The list is encrypted and signed so the user can't edit 
 that was their idea ("so I have no control over it so I don't doomscroll").
 Subtitles off by default, with reveal-line, replay-line, keep-on and a transcript;
 loop a line with a pause to say it back (L), ¾ speed (−), and keep a line with its sound
-(K) for a small spaced review in the Lines window (⌘L: 1, 3, 7, 16, 35, 75 days; ten kept
-and thirty heard a day at most). `README.md` is the full spec; the research behind the
+(K) for a spaced review in the Lines window (⌘L: 1, 3, 7, 16, 35, 75 days; fifteen kept and
+sixty heard a day at most, no keeping while 45 wait). Once the owner writes what a line
+means (Tab), it alternates: hear it and understand / see their words and say it in Russian.
+The owner is A2–B1 (structure ahead, vocabulary behind, speaks in fragments): size things
+for that, not for a beginner. `README.md` is the full spec; the research behind the
 2026-10-27 changes is `~/dendron-autopilot/reports/r1-research.md` on the Mac Pro.
 
 This repo is **private**: downloading builds on Wowfunhappy's unlicensed
@@ -16,7 +19,7 @@ media-subscriptions-prefpane. Never push it anywhere public.
 ## Two machines
 
 - **MacBook** (macOS 27, Xcode): builds. `make dist` runs verify (107 bundled binaries
-  checked against the 10.9 SDK), analyze, ~308 unit checks and 11 TLS checks, then
+  checked against the 10.9 SDK), analyze, ~324 unit checks and 11 TLS checks, then
   writes `Russian Shelf.zip`.
 - **Mac Pro** (10.9.5): runs it. Its git is ≤ 1.9 (Command Line Tools for 10.9): no
   post-1.9 git syntax anywhere that runs there, tests included (the
@@ -24,7 +27,7 @@ media-subscriptions-prefpane. Never push it anywhere public.
   broke the suite). If you are Claude on the Mac Pro: install, run `--selftest`, read
   `Logs/report.log`, report back.
 - The Mac Pro *can* build the app, the tests, the shots and the icon with its own
-  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (308/308 on 2026-10-27),
+  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (324/324 on 2026-10-27),
   `make SDK=/ shots`, `make SDK=/ icon`. Not `dist` (verify needs `dyld_info`), so
   `Russian Shelf.zip` is still rebuilt on the MacBook.
 
@@ -58,7 +61,9 @@ media-subscriptions-prefpane. Never push it anywhere public.
 
 ## Still untested on the real Mac Pro
 
-- 2026-10-27 (r1): L, −, K and the Lines window ran in tests and shots only. The sound
+- 2026-10-27 (r1): L, −, K and the Lines window (with Tab for a meaning and the "say
+  it in Russian" cards) ran in tests and shots only; typing in the meaning field hasn't
+  been tried by a person. The sound
   cut (AVAssetExportSession, Apple M4A) is tested on 10.9.5 with a WAV in `make test`
   and on a real shelf video by `--selftest`; slower playback, the loop's pause and the
   review's AVAudioPlayer rate haven't been heard by a person yet.

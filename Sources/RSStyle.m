@@ -826,8 +826,38 @@ static NSDictionary *RSTranscriptText(BOOL current)
 
 + (NSSize)reviewWindowSize { return NSMakeSize(640, 400); }
 
+static NSRect RSReviewCard(NSRect rect)
+{
+    CGFloat bar = [RSStyle hintBarHeight];
+    NSRect wall = rect;
+    wall.origin.y += bar;
+    wall.size.height -= bar;
+    return NSMakeRect(NSMinX(wall) + 44, NSMinY(wall) + RSPlankHeight + 6, NSWidth(wall) - 88, NSHeight(wall) - RSPlankHeight - 6 - 30);
+}
+
++ (NSRect)reviewMeaningRectIn:(NSRect)rect note:(BOOL)note
+{
+    NSRect card = RSReviewCard(rect);
+    return NSMakeRect(NSMinX(card) + 24, NSMinY(card) + (note ? 32 : 12), NSWidth(card) - 48, 24);
+}
+
++ (void)styleMeaningField:(NSTextField *)field
+{
+    [field setBezeled:NO];
+    [field setBordered:NO];
+    [field setDrawsBackground:YES];
+    [field setBackgroundColor:RSRGB(0xfffdf6, 1)];
+    [field setFocusRingType:NSFocusRingTypeNone];
+    [field setFont:RSSerifItalic(14)];
+    [field setTextColor:RSRGB(0x1f3f8a, 1)];          // blue ink: the owner's own hand
+    [field setAlignment:NSCenterTextAlignment];
+    [[field cell] setPlaceholderString:@"What it means, in your words (Tab to write, Return to keep)"];
+    [[field cell] setLineBreakMode:NSLineBreakByTruncatingTail];
+}
+
 + (void)drawReviewIn:(NSRect)rect heading:(NSString *)heading source:(NSString *)source before:(NSString *)before
-                text:(NSString *)text message:(NSString *)message note:(NSString *)note keys:(NSArray *)keys
+                text:(NSString *)text prompt:(NSString *)prompt message:(NSString *)message note:(NSString *)note
+          meaningRow:(BOOL)meaningRow keys:(NSArray *)keys
 {
     CGFloat bar = [self hintBarHeight];
     NSRect wall = rect;
@@ -839,7 +869,7 @@ static NSDictionary *RSTranscriptText(BOOL current)
     RSDrawPlank(plank);
     [self drawHintBarIn:RSBottomStrip(rect, bar) items:keys];
 
-    NSRect card = NSMakeRect(NSMinX(wall) + 44, NSMaxY(plank) + 6, NSWidth(wall) - 88, NSHeight(wall) - RSPlankHeight - 6 - 30);
+    NSRect card = RSReviewCard(rect);
     RSDrawCard(card, 0, YES);
     CGFloat pad = 24;
     CGFloat ruleY = NSMaxY(card) - 44;
@@ -859,7 +889,13 @@ static NSDictionary *RSTranscriptText(BOOL current)
         RSDrawText(source, a, NSMakeRect(NSMinX(card) + pad, top - 16, width, 16));
         top -= 26;
     }
-    CGFloat bottom = NSMinY(card) + ([note length] ? 34 : 16);
+    CGFloat bottom = NSMinY(card) + ([note length] ? 34 : 16) + (meaningRow ? 30 : 0);
+    if (meaningRow) {
+        // The rule the owner writes on.
+        NSRect m = [self reviewMeaningRectIn:rect note:[note length] > 0];
+        [RSRGB(0x8a7a5c, 0.6) set];
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(m), NSMinY(m) - 2, NSWidth(m), 1), NSCompositeSourceOver);
+    }
     if ([before length]) {
         NSDictionary *b = RSText(RSSerifItalic(13), RSInkFaint(), NSLeftTextAlignment, NSLineBreakByWordWrapping);
         NSString *one = [[before componentsSeparatedByString:@"\n"] componentsJoinedByString:@" "];
@@ -868,7 +904,12 @@ static NSDictionary *RSTranscriptText(BOOL current)
         top -= bh + 8;
     }
     NSRect body = NSMakeRect(NSMinX(card) + pad, bottom, width, MAX(0, top - bottom));
-    if ([text length]) {
+    if ([prompt length]) {
+        // The owner's words, in blue ink, to be said in Russian.
+        NSDictionary *t = RSText(RSSerifItalic(24), RSRGB(0x1f3f8a, 1), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+        CGFloat th = MIN(NSHeight(body), RSHeightOf(prompt, t, width));
+        RSDrawText(prompt, t, NSMakeRect(NSMinX(body), round(NSMidY(body) - th / 2), width, th));
+    } else if ([text length]) {
         NSDictionary *t = RSText(RSSerif(24), RSInk(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
         CGFloat th = MIN(NSHeight(body), RSHeightOf(text, t, width));
         RSDrawText(text, t, NSMakeRect(NSMinX(body), round(NSMidY(body) - th / 2), width, th));
