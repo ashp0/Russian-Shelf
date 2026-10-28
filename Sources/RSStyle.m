@@ -1,4 +1,5 @@
 #import "RSStyle.h"
+#import "RSLibrary.h"
 #import "RSReport.h"
 #include <math.h>
 
@@ -753,6 +754,88 @@ static void RSDrawCaptionBox(NSString *text, NSRect videoRect, NSFont *font, NSC
 {
     NSGradient *g = [[[NSGradient alloc] initWithStartingColor:RSRGB(0x3a4a5c, 1) endingColor:RSRGB(0x161b22, 1)] autorelease];
     [g drawInRect:rect angle:[[NSGraphicsContext currentContext] isFlipped] ? 90 : -90];
+}
+
+// ---- After watching: how was it? -------------------------------------------------
+
+static NSString *const RSFeedbackLabel = @"This video was";
+
+static NSDictionary *RSFeedbackText(BOOL chosen)
+{
+    return RSText(chosen ? [NSFont boldSystemFontOfSize:12.5] : RSFont(12.5), chosen ? RSInk() : RSRGB(0xe4e4e8, 1),
+                  NSLeftTextAlignment, NSLineBreakByClipping);
+}
+
++ (NSArray *)feedbackChoices
+{
+    return [NSArray arrayWithObjects:RSFeltTooEasy, RSFeltAboutRight, RSFeltTooHard, RSWantMore, RSWantLess, nil];
+}
+
+// Lays the slip out from its left edge; returns the rects and the width used.
+static NSArray *RSFeedbackLayout(NSRect panel, CGFloat *width)
+{
+    NSMutableArray *rects = [NSMutableArray array];
+    CGFloat x = NSMinX(panel) + 14 + ceil([RSFeedbackLabel sizeWithAttributes:RSText(RSSerifItalic(12.5), RSInkSoft(),
+                                          NSLeftTextAlignment, NSLineBreakByClipping)].width) + 14;
+    CGFloat h = 20, y = round(NSMidY(panel) - h / 2);
+    NSArray *choices = [RSStyle feedbackChoices];
+    for (NSUInteger i = 0; i < [choices count]; i++) {
+        if (i == 3) x += 16;        // the second question
+        CGFloat w = ceil([[choices objectAtIndex:i] sizeWithAttributes:RSFeedbackText(YES)].width) + 16;
+        [rects addObject:[NSValue valueWithRect:NSMakeRect(x, y, w, h)]];
+        x += w + 4;
+    }
+    x += 8;
+    [rects addObject:[NSValue valueWithRect:NSMakeRect(x, y, 20, h)]];
+    x += 20 + 10;
+    if (width) *width = x - NSMinX(panel);
+    return rects;
+}
+
++ (NSSize)feedbackPanelSize
+{
+    CGFloat width = 0;
+    RSFeedbackLayout(NSMakeRect(0, 0, 1000, 34), &width);
+    return NSMakeSize(ceil(width), 34);
+}
+
++ (NSArray *)feedbackItemRectsIn:(NSRect)panel
+{
+    return RSFeedbackLayout(panel, NULL);
+}
+
++ (void)drawFeedbackIn:(NSRect)panel felt:(NSString *)felt want:(NSString *)want hover:(NSInteger)hover
+{
+    [RSRGB(0x000000, 0.66) set];
+    [[NSBezierPath bezierPathWithRoundedRect:panel xRadius:7 yRadius:7] fill];
+    NSDictionary *label = RSText(RSSerifItalic(12.5), RSRGB(0xc9c2b2, 1), NSLeftTextAlignment, NSLineBreakByClipping);
+    CGFloat lh = RSLineHeight(RSSerifItalic(12.5));
+    RSDrawText(RSFeedbackLabel, label, NSMakeRect(NSMinX(panel) + 14, round(NSMidY(panel) - lh / 2), 200, lh));
+    NSArray *rects = RSFeedbackLayout(panel, NULL);
+    NSArray *choices = [self feedbackChoices];
+    for (NSUInteger i = 0; i < [rects count]; i++) {
+        NSRect r = [[rects objectAtIndex:i] rectValue];
+        BOOL isClose = i == [choices count];
+        NSString *word = isClose ? @"✕" : [choices objectAtIndex:i];
+        BOOL chosen = !isClose && ([word isEqualToString:felt] || [word isEqualToString:want]);
+        if (chosen) {
+            // Chosen: a cream tab, like the cards on the shelf.
+            [RSCream() set];
+            [[NSBezierPath bezierPathWithRoundedRect:r xRadius:4 yRadius:4] fill];
+        } else if ((NSInteger)i == hover) {
+            [RSRGB(0xffffff, 0.16) set];
+            [[NSBezierPath bezierPathWithRoundedRect:r xRadius:4 yRadius:4] fill];
+        }
+        NSDictionary *a = RSFeedbackText(chosen);
+        CGFloat th = RSLineHeight([a objectForKey:NSFontAttributeName]);
+        CGFloat tw = ceil([word sizeWithAttributes:a].width);
+        RSDrawText(word, a, NSMakeRect(round(NSMidX(r) - tw / 2), round(NSMidY(r) - th / 2), tw + 2, th));
+        if (i == 2) {
+            // Between the two questions.
+            [RSRGB(0xffffff, 0.25) set];
+            NSRectFillUsingOperation(NSMakeRect(NSMaxX(r) + 10, NSMinY(r) + 2, 1, NSHeight(r) - 4), NSCompositeSourceOver);
+        }
+    }
 }
 
 // ---- The transcript ---------------------------------------------------------

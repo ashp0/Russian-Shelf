@@ -79,6 +79,83 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 
 @end
 
+// ---- After watching: how was it? -----------------------------------------------
+
+@interface RSFeedbackView : NSView {
+    NSInteger _hover;
+}
+@property (nonatomic, copy) NSString *felt, *want;
+@property (nonatomic, assign) RSPlayer *owner;
+@end
+
+@interface RSPlayer ()
+- (void)feedbackClicked:(NSInteger)item;
+@end
+
+@implementation RSFeedbackView
+
+- (id)initWithFrame:(NSRect)frame
+{
+    if ((self = [super initWithFrame:frame])) _hover = -1;
+    return self;
+}
+
+- (void)dealloc
+{
+    [_felt release];
+    [_want release];
+    [super dealloc];
+}
+
+- (NSView *)hitTest:(NSPoint)point
+{
+    return ![self isHidden] && NSPointInRect(point, [self frame]) ? self : nil;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
+
+- (NSInteger)itemAt:(NSEvent *)event
+{
+    NSPoint p = [self convertPoint:[event locationInWindow] fromView:nil];
+    NSArray *rects = [RSStyle feedbackItemRectsIn:[self bounds]];
+    for (NSUInteger i = 0; i < [rects count]; i++)
+        if (NSPointInRect(p, NSInsetRect([[rects objectAtIndex:i] rectValue], -4, -6))) return (NSInteger)i;
+    return -1;
+}
+
+- (void)mouseDown:(NSEvent *)event { }
+- (void)mouseUp:(NSEvent *)event
+{
+    NSInteger i = [self itemAt:event];
+    if (i >= 0) [_owner feedbackClicked:i];
+}
+
+- (void)updateTrackingAreas
+{
+    [super updateTrackingAreas];
+    for (NSTrackingArea *a in [self trackingAreas]) [self removeTrackingArea:a];
+    NSTrackingArea *area = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+        options:NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingActiveInActiveApp | NSTrackingInVisibleRect
+          owner:self userInfo:nil];
+    [self addTrackingArea:area];
+    [area release];
+}
+
+- (void)mouseMoved:(NSEvent *)event
+{
+    NSInteger i = [self itemAt:event];
+    if (i != _hover) { _hover = i; [self setNeedsDisplay:YES]; }
+}
+
+- (void)mouseExited:(NSEvent *)event { _hover = -1; [self setNeedsDisplay:YES]; }
+
+- (void)drawRect:(NSRect)dirty
+{
+    [RSStyle drawFeedbackIn:[self bounds] felt:_felt want:_want hover:_hover];
+}
+
+@end
+
 // ---- The transcript ---------------------------------------------------------
 
 @interface RSTranscriptView : NSView {
@@ -259,6 +336,9 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     NSScrollView *_transcriptScroll;
     RSTranscriptView *_transcriptView;
     RSHintBar *_hintBar;
+    RSFeedbackView *_feedbackView;
+    NSString *_felt, *_want;
+    BOOL _feedbackOffered;
     RSSubtitles *_subtitles;
     NSString *_title, *_note;
     double _position, _furthest, _duration, _lastTime, _testingTime, _revealAt;
@@ -347,6 +427,13 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(transcriptScrolled:)
                                                  name:NSViewBoundsDidChangeNotification object:[_transcriptScroll contentView]];
 
+    _feedbackView = [[RSFeedbackView alloc] initWithFrame:NSZeroRect];
+    [_feedbackView setOwner:self];
+    [_feedbackView setHidden:YES];
+    [content addSubview:_feedbackView];
+    // Asked once a visit, at 90%, unless it was answered or watched to there before.
+    _feedbackOffered = duration > 0 && furthest >= 0.9 * duration;
+
     _hintBar = [[RSHintBar alloc] initWithFrame:NSZeroRect];
     [content addSubview:_hintBar];
     [self updateHints];
@@ -375,6 +462,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_transcriptScroll release];
     [_transcriptView release];
     [_hintBar release];
+    [_feedbackView setOwner:nil];
+    [_feedbackView release];
+    [_felt release];
+    [_want release];
     [_subtitles release];
     [_identifier release];
     [_title release];
@@ -404,6 +495,9 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_hintBar setFrame:NSMakeRect(0, 0, NSWidth(b), hint)];
     [_playerView setFrame:video];
     [_captionView setFrame:video];
+    NSSize panel = [RSStyle feedbackPanelSize];
+    [_feedbackView setFrame:NSMakeRect(round(NSMidX(video) - panel.width / 2), NSMaxY(video) - 18 - panel.height,
+                                       panel.width, panel.height)];
     [_transcriptScroll setFrame:NSMakeRect(NSMaxX(video), hint, side, NSHeight(b) - hint)];
     [_transcriptScroll setHidden:!_transcriptShown];
     [_captionView setNeedsDisplay:YES];
@@ -506,6 +600,11 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     if ([self playing] && t > _lastTime && t - _lastTime <= RSSkipSeconds + 1 && _lastTime <= _furthest + RSSkipSeconds + 1)
         _furthest = MAX(_furthest, t);
     _lastTime = t;
+    double d = [self duration];
+    if (!_feedbackOffered && d > 0 && _furthest >= 0.9 * d) {
+        _feedbackOffered = YES;
+        if (!(_felt && _want)) [self showFeedback];
+    }
     [self loopAt:t];
     [self updateCaptionAt:t];
     [self updateTranscriptAt:t];
@@ -655,7 +754,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles." for:2.5]; return; }
     NSUInteger i = [self lineMeantAt:t];
     if (i == NSNotFound) { [self showNote:@"Nothing is being said just now." for:1.5]; return; }
-    if (_revealIndex != i) [_delegate player:self helped:RSHelpShown];
+    if (_revealIndex != i) [_delegate player:self helped:RSHelpShown line:[[_subtitles lines] objectAtIndex:i]];
     _revealIndex = i;
     _revealAt = t;
     [self updateCaptionAt:t];
@@ -673,13 +772,15 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     if (i == NSNotFound) return;
     [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:i] start] - 0.05)];
     [self play];
-    [_delegate player:self helped:RSHelpHeardAgain];
+    [_delegate player:self helped:RSHelpHeardAgain line:[[_subtitles lines] objectAtIndex:i]];
 }
 
+// A click on a line in the transcript: it was read there.
 - (void)seekToLine:(NSUInteger)index
 {
     [self stopLoop];
     if (index >= [[_subtitles lines] count]) return;
+    [_delegate player:self helped:RSHelpTranscript line:[[_subtitles lines] objectAtIndex:index]];
     [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:index] start] - 0.05)];
 }
 
@@ -687,6 +788,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 {
     if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles." for:2.5]; return; }
     [self setSubtitlesOn:!_subtitlesOn];
+    if (_subtitlesOn) [_delegate player:self helped:RSHelpSubtitles line:[self lineAt:[self currentTime]]];
     [self updateHints];
     [self showNote:_subtitlesOn ? @"Subtitles stay on." : @"Subtitles off." for:1.2];
 }
@@ -694,6 +796,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 - (void)toggleTranscript
 {
     [self setTranscriptShown:!_transcriptShown];
+    if (_transcriptShown) [_delegate player:self helped:RSHelpTranscript line:[self lineAt:[self currentTime]]];
     // Keep the video the size it was: the window grows by the transcript.
     if (![self fullScreen]) {
         NSRect f = [_window frame];
@@ -739,7 +842,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     _loopSeekAt = CFAbsoluteTimeGetCurrent();
     [self seekTo:MAX(0, [(RSLine *)[[_subtitles lines] objectAtIndex:i] start] - 0.05)];
     [self play];
-    [_delegate player:self helped:RSHelpHeardAgain];
+    [_delegate player:self helped:RSHelpLooped line:[[_subtitles lines] objectAtIndex:i]];
     [self showNote:@"This line, again and again. Say it back in the pause. L stops." for:3];
     [self updateHints];
 }
@@ -788,8 +891,80 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 {
     _rate = _rate < 1 ? 1 : RSSlowerRate;
     if ([self playing]) [self play];
+    if (_rate < 1) [_delegate player:self helped:RSHelpSlowed line:[self lineAt:[self currentTime]]];
     [self showNote:_rate < 1 ? @"Three-quarter speed." : @"Full speed." for:1.2];
     [self updateHints];
+}
+
+// The line being said at t, or the one just said; nil if none.
+- (RSLine *)lineAt:(double)t
+{
+    NSUInteger i = [self lineMeantAt:t];
+    return i == NSNotFound || i >= [[_subtitles lines] count] ? nil : [[_subtitles lines] objectAtIndex:i];
+}
+
+// ---- How was it? ---------------------------------------------------------------
+
+- (NSString *)felt { return _felt; }
+- (NSString *)want { return _want; }
+- (BOOL)feedbackShown { return ![_feedbackView isHidden]; }
+
+- (void)setFelt:(NSString *)felt want:(NSString *)want
+{
+    [_felt release];
+    _felt = [felt copy];
+    [_want release];
+    _want = [want copy];
+    [_feedbackView setFelt:_felt];
+    [_feedbackView setWant:_want];
+    [_feedbackView setNeedsDisplay:YES];
+}
+
+- (void)showFeedback
+{
+    [_feedbackView setHidden:NO];
+    [_feedbackView setNeedsDisplay:YES];
+    [self quietFeedbackLater];
+}
+
+- (void)hideFeedback
+{
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(hideFeedback) object:nil];
+    [_feedbackView setHidden:YES];
+}
+
+// Left alone, it goes after a while: skipping is doing nothing.
+- (void)quietFeedbackLater
+{
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(hideFeedback) object:nil];
+    [self performSelector:@selector(hideFeedback) withObject:nil afterDelay:12];
+}
+
+- (void)toggleFeedback
+{
+    if ([self feedbackShown]) [self hideFeedback];
+    else [self showFeedback];
+}
+
+- (void)chooseFeedback:(NSString *)choice
+{
+    NSString *felt = _felt, *want = _want;
+    if ([choice isEqualToString:RSFeltTooEasy] || [choice isEqualToString:RSFeltAboutRight] || [choice isEqualToString:RSFeltTooHard])
+        felt = [choice isEqualToString:_felt] ? nil : choice;
+    else if ([choice isEqualToString:RSWantMore] || [choice isEqualToString:RSWantLess])
+        want = [choice isEqualToString:_want] ? nil : choice;
+    else return;
+    [self setFelt:felt want:want];
+    [_delegate player:self felt:_felt want:_want];
+    if ([self feedbackShown]) [self quietFeedbackLater];
+}
+
+- (void)feedbackClicked:(NSInteger)item
+{
+    NSArray *choices = [RSStyle feedbackChoices];
+    if (item < 0) return;
+    if ((NSUInteger)item >= [choices count]) { [self hideFeedback]; return; }      // the ✕
+    [self chooseFeedback:[choices objectAtIndex:(NSUInteger)item]];
 }
 
 - (void)keepLine
@@ -834,6 +1009,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     picture.size.height -= RSControlBarHeight;
     NSPoint p = [[_window contentView] convertPoint:[event locationInWindow] fromView:nil];
     if (!NSPointInRect(p, picture)) return NO;
+    if ([self feedbackShown] && NSPointInRect(p, [_feedbackView frame])) return NO;
     [self toggleFullScreen];
     return YES;
 }
@@ -854,6 +1030,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
         case 'l': case 'L':             [self toggleLoop]; return YES;
         case '-': case 0x2212:          [self toggleSlower]; return YES;
         case 'k': case 'K':             [self keepLine]; return YES;
+        case 'h': case 'H':             [self toggleFeedback]; return YES;
         case 27:                        // Escape
             if (![self fullScreen]) return NO;
             [self toggleFullScreen];

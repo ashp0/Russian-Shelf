@@ -1,5 +1,6 @@
 #import "RSLibrary.h"
 #import "RSSubtitles.h"
+#include <math.h>
 
 const double RSFinishedFraction = 0.9;
 
@@ -312,17 +313,113 @@ static NSString *RSFirstFile(NSString *folder, NSString *prefix, NSArray *extens
     return finished && ![old finished];
 }
 
+NSString *const RSFeltTooEasy = @"too easy", *const RSFeltAboutRight = @"about right", *const RSFeltTooHard = @"too hard";
+NSString *const RSWantMore = @"more like this", *const RSWantLess = @"less like this";
+
+// The key in State.plist (the first three as they were before the rest).
 static NSString *RSHelpKey(RSHelp kind)
 {
-    return kind == RSHelpShown ? @"shown" : kind == RSHelpHeardAgain ? @"heardAgain" : @"kept";
+    switch (kind) {
+        case RSHelpShown:       return @"shown";
+        case RSHelpHeardAgain:  return @"heardAgain";
+        case RSHelpKept:        return @"kept";
+        case RSHelpLooped:      return @"looped";
+        case RSHelpSlowed:      return @"slowed";
+        case RSHelpTranscript:  return @"transcript";
+        case RSHelpSubtitles:   return @"subtitles";
+        default:                return @"other";
+    }
+}
+
+NSString *RSHelpName(RSHelp kind)
+{
+    switch (kind) {
+        case RSHelpShown:       return @"shown";
+        case RSHelpHeardAgain:  return @"heard again";
+        case RSHelpKept:        return @"kept";
+        case RSHelpLooped:      return @"looped";
+        case RSHelpSlowed:      return @"slowed";
+        case RSHelpTranscript:  return @"transcript";
+        case RSHelpSubtitles:   return @"subtitles";
+        default:                return @"other";
+    }
 }
 
 - (void)countHelp:(RSHelp)kind for:(NSString *)identifier
 {
-    if ([identifier length] == 0) return;
+    [self countHelp:kind for:identifier line:nil start:0];
+}
+
+- (void)countHelp:(RSHelp)kind for:(NSString *)identifier line:(NSString *)text start:(double)start
+{
+    if ([identifier length] == 0 || kind >= RSHelpKinds) return;
     NSMutableDictionary *w = [NSMutableDictionary dictionaryWithDictionary:[_watched objectForKey:identifier] ?: [NSDictionary dictionary]];
     NSUInteger n = [[w objectForKey:RSHelpKey(kind)] unsignedIntegerValue] + 1;
     [w setObject:[NSNumber numberWithUnsignedInteger:n] forKey:RSHelpKey(kind)];
+    if ([text length]) {
+        // Lines by their start in milliseconds, each with its own counts.
+        NSMutableDictionary *lines = [NSMutableDictionary dictionaryWithDictionary:
+                                      [[w objectForKey:@"lines"] isKindOfClass:[NSDictionary class]] ? [w objectForKey:@"lines"] : [NSDictionary dictionary]];
+        NSString *key = [NSString stringWithFormat:@"%ld", (long)llround(MAX(0, start) * 1000)];
+        NSMutableDictionary *line = [NSMutableDictionary dictionaryWithDictionary:
+                                     [[lines objectForKey:key] isKindOfClass:[NSDictionary class]] ? [lines objectForKey:key] : [NSDictionary dictionary]];
+        [line setObject:text forKey:@"text"];
+        [line setObject:[NSNumber numberWithDouble:MAX(0, start)] forKey:@"start"];
+        [line setObject:[NSNumber numberWithUnsignedInteger:[[line objectForKey:RSHelpKey(kind)] unsignedIntegerValue] + 1]
+                 forKey:RSHelpKey(kind)];
+        [lines setObject:line forKey:key];
+        [w setObject:lines forKey:@"lines"];
+    }
+    [_watched setObject:w forKey:identifier];
+}
+
+- (NSArray *)helpedLinesFor:(NSString *)identifier
+{
+    NSDictionary *lines = [[_watched objectForKey:identifier] objectForKey:@"lines"];
+    if (![lines isKindOfClass:[NSDictionary class]]) return [NSArray array];
+    NSMutableArray *found = [NSMutableArray array];
+    for (NSString *key in lines) {
+        NSDictionary *line = [lines objectForKey:key];
+        if (![line isKindOfClass:[NSDictionary class]] || ![[line objectForKey:@"text"] isKindOfClass:[NSString class]]) continue;
+        NSMutableDictionary *d = [NSMutableDictionary dictionaryWithObjectsAndKeys:[line objectForKey:@"text"], @"text",
+                                  [NSNumber numberWithDouble:[[line objectForKey:@"start"] doubleValue]], @"start", nil];
+        for (int k = 0; k < RSHelpKinds; k++) {
+            NSUInteger n = [[line objectForKey:RSHelpKey((RSHelp)k)] unsignedIntegerValue];
+            if (n) [d setObject:[NSNumber numberWithUnsignedInteger:n] forKey:RSHelpName((RSHelp)k)];
+        }
+        [found addObject:d];
+    }
+    [found sortUsingComparator:^NSComparisonResult(id a, id b) {
+        double x = [[a objectForKey:@"start"] doubleValue], y = [[b objectForKey:@"start"] doubleValue];
+        return x < y ? NSOrderedAscending : x > y ? NSOrderedDescending : NSOrderedSame;
+    }];
+    return found;
+}
+
+static NSString *RSOneOf(id value, NSArray *allowed)
+{
+    return [value isKindOfClass:[NSString class]] && [allowed containsObject:value] ? value : nil;
+}
+
+- (NSString *)feltFor:(NSString *)identifier
+{
+    return RSOneOf([[_watched objectForKey:identifier] objectForKey:@"felt"],
+                   [NSArray arrayWithObjects:RSFeltTooEasy, RSFeltAboutRight, RSFeltTooHard, nil]);
+}
+
+- (NSString *)wantFor:(NSString *)identifier
+{
+    return RSOneOf([[_watched objectForKey:identifier] objectForKey:@"want"], [NSArray arrayWithObjects:RSWantMore, RSWantLess, nil]);
+}
+
+- (void)setFelt:(NSString *)felt want:(NSString *)want for:(NSString *)identifier
+{
+    if ([identifier length] == 0) return;
+    NSMutableDictionary *w = [NSMutableDictionary dictionaryWithDictionary:[_watched objectForKey:identifier] ?: [NSDictionary dictionary]];
+    felt = RSOneOf(felt, [NSArray arrayWithObjects:RSFeltTooEasy, RSFeltAboutRight, RSFeltTooHard, nil]);
+    want = RSOneOf(want, [NSArray arrayWithObjects:RSWantMore, RSWantLess, nil]);
+    if (felt) [w setObject:felt forKey:@"felt"]; else [w removeObjectForKey:@"felt"];
+    if (want) [w setObject:want forKey:@"want"]; else [w removeObjectForKey:@"want"];
     [_watched setObject:w forKey:identifier];
 }
 

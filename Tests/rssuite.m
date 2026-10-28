@@ -652,19 +652,30 @@ static void TestReports(void)
     CHECK(!Has(text, @"Help (") && !Has(text, @"Kept:"), "no help asked, nothing kept: no sections");
 
     // Lines shown, heard again and kept, and the kept lines themselves.
+    [library countHelp:RSHelpShown for:Id(2) line:@"Она отрезала\nволосы." start:250.4];
     [library countHelp:RSHelpShown for:Id(2)];
-    [library countHelp:RSHelpShown for:Id(2)];
-    [library countHelp:RSHelpHeardAgain for:Id(2)];
+    [library countHelp:RSHelpHeardAgain for:Id(2) line:@"Она отрезала\nволосы." start:250.4];
+    [library countHelp:RSHelpLooped for:Id(2) line:@"Потом она ушла." start:12];
+    [library countHelp:RSHelpSlowed for:Id(2) line:@"Потом она ушла." start:12];
+    [library countHelp:RSHelpTranscript for:Id(2) line:nil start:0];
+    [library countHelp:RSHelpSubtitles for:Id(2) line:@"Потом она ушла." start:12];
     [library countHelp:RSHelpKept for:Id(2)];
+    [library countHelp:RSHelpKinds for:Id(2) line:@"x" start:1];         // not a kind: ignored
     [library countHelp:RSHelpShown for:@"notonshelf1"];
     RSLines *lines = [[[RSLines alloc] initWithFolder:Temp(@"report-lines")] autorelease];
-    [lines keepText:@"Она отрезала\nволосы." before:nil video:Id(2) title:@"Story" start:250.4 end:252 today:100 problem:NULL];
+    RSKeptLine *withMeaning = [lines keepText:@"Она отрезала\nволосы." before:nil video:Id(2) title:@"Story" start:250.4 end:252 today:100 problem:NULL];
+    [withMeaning setMeaning:@"She cut\nher hair."];
     [lines keepText:@"Elsewhere." before:nil video:@"notonshelf1" title:@"Other" start:5 end:6 today:100 problem:NULL];
     text = RSReportText([library current], library, lines, when);
-    NSString *helpLine = [NSString stringWithFormat:@"\nHelp (lines shown, heard again, kept):\n%@ | shown 2 | heard again 1 | kept 1\n", Id(2)];
+    NSString *helpLine = [NSString stringWithFormat:@"\nHelp (shown, heard again, looped, slowed, transcript, subtitles, kept):\n"
+                          "%@ | shown 2 | heard again 1 | looped 1 | slowed 1 | transcript 1 | subtitles 1 | kept 1\n", Id(2)];
     CHECK(Has(text, helpLine), "help section:\n%s", [text UTF8String]);
+    NSString *askedLines = [NSString stringWithFormat:@"\nLines help was asked on:\n%@ | 0:12 | looped 1, slowed 1, subtitles 1 | Потом она ушла.\n"
+                            "%@ | 4:10 | shown 1, heard again 1 | Она отрезала / волосы.\n", Id(2), Id(2)];
+    CHECK(Has(text, askedLines), "the lines, by time, with what was asked on each");
+    CHECK(!Has(text, @"How it felt"), "nothing chosen: no feelings section");
     CHECK(!Has(text, [Id(1) stringByAppendingString:@" | shown"]) && !Has(text, @"notonshelf1"), "only this shelf's videos, only those helped");
-    NSString *keptLine = [NSString stringWithFormat:@"\nKept:\n%@ | 4:10 | Она отрезала / волосы.\n", Id(2)];
+    NSString *keptLine = [NSString stringWithFormat:@"\nKept:\n%@ | 4:10 | Она отрезала / волосы. | means: She cut / her hair.\n", Id(2)];
     CHECK(Has(text, keptLine) && !Has(text, @"Elsewhere"), "kept section, on one line each");
     CHECK(Has(text, [Id(2) stringByAppendingString:@" | partly | 4:10 of 11:30 | Story"]) && [text rangeOfString:@"\nHelp ("].location > [text rangeOfString:Id(4)].location, "the video lines are as before, then help");
     // Help counts survive more watching, and a reload.
@@ -674,6 +685,35 @@ static void TestReports(void)
     CHECK([again help:RSHelpShown for:Id(2)] == 2 && [again help:RSHelpHeardAgain for:Id(2)] == 1 &&
           [again help:RSHelpKept for:Id(2)] == 1 && [again help:RSHelpShown for:Id(3)] == 0 && [[again watchFor:Id(2)] furthest] == 300,
           "help counts kept with the watching, and saved");
+    NSArray *helped = [again helpedLinesFor:Id(2)];
+    CHECK([helped count] == 2 && [[[helped objectAtIndex:1] objectForKey:@"heard again"] intValue] == 1 &&
+          [[[helped objectAtIndex:0] objectForKey:@"looped"] intValue] == 1 && [[helped objectAtIndex:0] objectForKey:@"shown"] == nil,
+          "the lines, saved");
+
+    // How it felt: one word each, about the video; only the known words.
+    CHECK([again feltFor:Id(1)] == nil && [again wantFor:Id(1)] == nil, "nothing chosen yet");
+    [again setFelt:RSFeltAboutRight want:nil for:Id(1)];
+    [again setFelt:RSFeltTooHard want:RSWantMore for:Id(3)];
+    [again setFelt:@"5 stars" want:@"great" for:Id(4)];
+    CHECK([[again feltFor:Id(1)] isEqualToString:@"about right"] && [again wantFor:Id(1)] == nil &&
+          [again feltFor:Id(4)] == nil && [again wantFor:Id(4)] == nil, "chosen, and anything else refused");
+    [again recordPosition:400 furthest:400 duration:690 for:Id(3)];
+    [again save];
+    RSLibrary *third = [[[RSLibrary alloc] initWithFolder:folder aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    CHECK([[third feltFor:Id(3)] isEqualToString:@"too hard"] && [[third wantFor:Id(3)] isEqualToString:@"more like this"],
+          "kept through watching and a reload");
+    text = RSReportText([third current], third, lines, when);
+    NSString *feltLines = [NSString stringWithFormat:@"\nHow it felt (the owner's own choice, about the video):\n%@ | about right | -\n"
+                           "%@ | too hard | more like this\n", Id(1), Id(3)];
+    CHECK(Has(text, feltLines), "how it felt, in the report:\n%s", [text UTF8String]);
+    [third setFelt:nil want:nil for:Id(1)];
+    CHECK([third feltFor:Id(1)] == nil, "cleared");
+
+    // At most forty lines a video in the report.
+    for (int i = 0; i < 45; i++) [third countHelp:RSHelpShown for:Id(1) line:[NSString stringWithFormat:@"Line %d", i] start:i];
+    text = RSReportText([third current], third, lines, when);
+    CHECK(Has(text, [Id(1) stringByAppendingString:@" | 0:39 | shown 1 | Line 39\n"]) && !Has(text, @"| Line 40\n") &&
+          Has(text, [Id(1) stringByAppendingString:@" | … and 5 more lines\n"]), "forty, then how many more");
     CHECK([RSClock(3725) isEqualToString:@"1:02:05"] && [RSClock(59.6) isEqualToString:@"1:00"] && [RSClock(-3) isEqualToString:@"0:00"], "clock");
 
     NSArray *bad = [NSArray arrayWithObjects:@"Russian/Reports/../shelf.signed", @"Inbox/note.txt", @"Russian/Reports/a/b.txt",

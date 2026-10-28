@@ -15,6 +15,10 @@
 //   −            three-quarter speed, and full speed again (the pitch stays)
 //   K            keep this line, with its sound, to hear again on later days
 //                (RSLines)
+//   H            how was this video? (too easy / about right / too hard; more
+//                like this / less like this). It also comes up by itself, once,
+//                at the top of the picture when the video is 90% watched. One
+//                click, about the video, never a score; ignore it and it goes.
 //
 // It remembers where it was left. "How far" is the furthest point reached by
 // playing: dragging the scrubber to the end doesn't count.
@@ -28,8 +32,11 @@
 // Now and then while playing, at a pause, at the end, and on closing.
 - (void)player:(RSPlayer *)player position:(double)position furthest:(double)furthest duration:(double)duration;
 - (void)playerClosed:(RSPlayer *)player;
-// A line was shown, heard again or looped (counted for the report).
-- (void)player:(RSPlayer *)player helped:(RSHelp)kind;
+// Help was asked for (shown, heard again, looped, slowed, transcript,
+// subtitles), on this line (nil if none was being said). For the report.
+- (void)player:(RSPlayer *)player helped:(RSHelp)kind line:(RSLine *)line;
+// The owner's choice about the video changed (each nil if not chosen).
+- (void)player:(RSPlayer *)player felt:(NSString *)felt want:(NSString *)want;
 // Keep this line (with the one before it, for context). Returns what to say:
 // that it's kept, or why not.
 - (NSString *)player:(RSPlayer *)player keepLine:(RSLine *)line before:(RSLine *)before;
@@ -59,6 +66,13 @@
 - (void)toggleLoop;
 - (void)toggleSlower;
 - (void)keepLine;
+
+// How the video felt, as chosen before (the controller sets it on opening).
+- (void)setFelt:(NSString *)felt want:(NSString *)want;
+@property (nonatomic, readonly, copy) NSString *felt, *want;
+@property (nonatomic, readonly) BOOL feedbackShown;
+- (void)toggleFeedback;
+- (void)chooseFeedback:(NSString *)choice;     // one of RSFelt... / RSWant...; the same again clears it
 
 // For the screenshots: no movie playing, the clock set by hand, a painted
 // stand-in where the video goes.

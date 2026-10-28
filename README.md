@@ -64,6 +64,7 @@ Click a video (or select it with ↑ ↓ and press Return) to play it.
 | L | **Loop this line.** It plays, then waits as long as it took (at least a second and a half) for you to say it back, then plays again. ↓ shows it for the whole loop. L, Space or an arrow stops |
 | − | **Slower:** three-quarter speed, the voice's pitch kept. Again for full speed |
 | K | **Keep this line**, with its sound, to hear again tomorrow and on later days (below) |
+| H | **How was this video?** A slip at the top of the picture: *too easy · about right · too hard* and *more like this · less like this*. One click each, about the video, never a score; click a chosen word again to take it back, ✕ or H to put it away, or just ignore it (it goes by itself). It also comes up once by itself when the video is 90% watched, unless both are already chosen |
 
 Subtitles are off when a video opens. Each video remembers where you left it.
 A video counts as finished at 90%, and skipping ahead with the scrubber
@@ -308,11 +309,17 @@ JE4cI_Knzvc | finished | 19:20 of 19:20 | She Cut Her Hair to Save Her Husband �
 abcdefghijk | partly | 4:10 of 11:30 | The Fox and the Crane
 lmnopqrstuv | not started | 0:00 of 9:12 | ...
 
-Help (lines shown, heard again, kept):
-JE4cI_Knzvc | shown 12 | heard again 8 | kept 2
+Help (shown, heard again, looped, slowed, transcript, subtitles, kept):
+JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | kept 2
+
+How it felt (the owner's own choice, about the video):
+JE4cI_Knzvc | about right | more like this
+
+Lines help was asked on:
+JE4cI_Knzvc | 4:10 | shown 1, heard again 3, looped 1 | Она отрезала волосы, чтобы спасти мужа.
 
 Kept:
-JE4cI_Knzvc | 4:10 | Она отрезала волосы, чтобы спасти мужа.
+JE4cI_Knzvc | 4:10 | Она отрезала волосы, чтобы спасти мужа. | means: She cut off her hair to save her husband.
 ```
 
 - `from:` is the Mac's name in Sharing (not its network host name, which can
@@ -320,11 +327,22 @@ JE4cI_Knzvc | 4:10 | Она отрезала волосы, чтобы спаст
   watched on it, so a shelf watched on two Macs has two sets of reports: the
   newest from each Mac counts.
 - **Help** (only for videos where something was asked for): how many times a
-  line was shown (↓), heard again (↑ or a loop), and kept (K). It's how Claude
-  can tell whether a shelf is at the right level: a lot of help means stay at
-  this rung, little means move up. The app never shows these numbers.
+  line was shown (↓), heard again (↑), looped (L), slowed (− turned on), the
+  transcript opened or a line in it clicked (T), subtitles turned on (S), and
+  kept (K).
+- **How it felt**: the owner's own word on the video from the H slip, `-` for
+  a question left alone. Only videos where something was chosen.
+- **Lines help was asked on**: each line, by time, with what was asked on it
+  (at most 40 a video, then "… and N more lines"). This is where Claude on the
+  MacBook sees *which* verbs, endings and reductions needed help; the app
+  doesn't try to sort words into verbs and nouns itself (Russian needs a real
+  morphological dictionary for that, which the Mac Pro doesn't have).
 - **Kept** lists the lines kept from this shelf's videos, one per line (a
-  two-line cue joined with " / ").
+  two-line cue joined with " / "), with `means:` and the owner's own words
+  when they wrote some.
+
+All of it is for Claude choosing the next shelf (the level mix, more or less of
+a kind, which verbs to look for). The app never shows these numbers.
 
 It adds it as a new file, `Russian/Reports/shelf-<start>_<when>.txt`, in one
 commit that adds that file and nothing else. The commit is built in a

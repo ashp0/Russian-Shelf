@@ -41,6 +41,8 @@ NSString *RSComputerName(void)
     return [name length] ? name : @"this Mac";
 }
 
+const NSUInteger RSReportLinesPerVideo = 40;
+
 static NSString *RSOneLine(NSString *text)
 {
     return [[text componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]] componentsJoinedByString:@" / "];
@@ -66,18 +68,52 @@ NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_
         }
         [s appendFormat:@"%@ | %@ | %@ | %@\n", identifier, state, amount, [video title]];
     }
-    NSMutableString *help = [NSMutableString string], *kept = [NSMutableString string];
+    // The order the Help columns come in.
+    static const RSHelp order[] = { RSHelpShown, RSHelpHeardAgain, RSHelpLooped, RSHelpSlowed, RSHelpTranscript,
+                                    RSHelpSubtitles, RSHelpKept };
+    const size_t kinds = sizeof order / sizeof order[0];
+    NSMutableString *help = [NSMutableString string], *felt = [NSMutableString string],
+                    *asked = [NSMutableString string], *kept = [NSMutableString string];
     for (RSVideo *video in [shelf videos]) {
         NSString *identifier = [video identifier];
-        NSUInteger shown = [library help:RSHelpShown for:identifier], again = [library help:RSHelpHeardAgain for:identifier],
-                   keptCount = [library help:RSHelpKept for:identifier];
-        if (shown || again || keptCount)
-            [help appendFormat:@"%@ | shown %lu | heard again %lu | kept %lu\n", identifier,
-             (unsigned long)shown, (unsigned long)again, (unsigned long)keptCount];
-        for (RSKeptLine *line in [lines linesFromVideo:identifier])
-            [kept appendFormat:@"%@ | %@ | %@\n", identifier, RSClock([line start]), RSOneLine([line text])];
+        NSMutableString *row = [NSMutableString stringWithString:identifier];
+        NSUInteger any = 0;
+        for (size_t k = 0; k < kinds; k++) {
+            NSUInteger n = [library help:order[k] for:identifier];
+            any += n;
+            [row appendFormat:@" | %@ %lu", RSHelpName(order[k]), (unsigned long)n];
+        }
+        if (any) [help appendFormat:@"%@\n", row];
+
+        NSString *f = [library feltFor:identifier], *w = [library wantFor:identifier];
+        if (f || w) [felt appendFormat:@"%@ | %@ | %@\n", identifier, f ?: @"-", w ?: @"-"];
+
+        NSArray *helped = [library helpedLinesFor:identifier];
+        NSUInteger shownLines = 0;
+        for (NSDictionary *line in helped) {
+            if (shownLines++ == RSReportLinesPerVideo) {
+                [asked appendFormat:@"%@ | … and %lu more lines\n", identifier, (unsigned long)([helped count] - RSReportLinesPerVideo)];
+                break;
+            }
+            NSMutableArray *what = [NSMutableArray array];
+            for (size_t k = 0; k < kinds; k++) {
+                NSNumber *n = [line objectForKey:RSHelpName(order[k])];
+                if (n) [what addObject:[NSString stringWithFormat:@"%@ %@", RSHelpName(order[k]), n]];
+            }
+            [asked appendFormat:@"%@ | %@ | %@ | %@\n", identifier, RSClock([[line objectForKey:@"start"] doubleValue]),
+             [what componentsJoinedByString:@", "], RSOneLine([line objectForKey:@"text"])];
+        }
+
+        for (RSKeptLine *line in [lines linesFromVideo:identifier]) {
+            [kept appendFormat:@"%@ | %@ | %@", identifier, RSClock([line start]), RSOneLine([line text])];
+            if ([[line meaning] length]) [kept appendFormat:@" | means: %@", RSOneLine([line meaning])];
+            [kept appendString:@"\n"];
+        }
     }
-    if ([help length]) [s appendFormat:@"\nHelp (lines shown, heard again, kept):\n%@", help];
+    if ([help length])
+        [s appendFormat:@"\nHelp (shown, heard again, looped, slowed, transcript, subtitles, kept):\n%@", help];
+    if ([felt length]) [s appendFormat:@"\nHow it felt (the owner's own choice, about the video):\n%@", felt];
+    if ([asked length]) [s appendFormat:@"\nLines help was asked on:\n%@", asked];
     if ([kept length]) [s appendFormat:@"\nKept:\n%@", kept];
     return s;
 }

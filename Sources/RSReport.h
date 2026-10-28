@@ -10,19 +10,28 @@
 //     lmnopqrstuv | not started | 0:00 of 9:12 | ...
 //     wxyz0123456 | not downloaded | - | ...
 //
-//     Help (lines shown, heard again, kept):
-//     JE4cI_Knzvc | shown 12 | heard again 8 | kept 2
+//     Help (shown, heard again, looped, slowed, transcript, subtitles, kept):
+//     JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | kept 2
+//
+//     How it felt (the owner's own choice, about the video):
+//     JE4cI_Knzvc | about right | more like this
+//
+//     Lines help was asked on:
+//     JE4cI_Knzvc | 4:10 | shown 1, heard again 3, looped 1 | Она отрезала волосы.
 //
 //     Kept:
-//     JE4cI_Knzvc | 4:10 | Она отрезала волосы.
+//     JE4cI_Knzvc | 4:10 | Она отрезала волосы. | means: She cut her hair.
 //
 // "partly" gives the furthest point reached by playing (skipping ahead
 // doesn't count). "from:" names the Mac that wrote it: each Mac keeps its own
 // record of what was watched there, so the newest report from each Mac says
 // it all for that Mac; older ones from the same Mac can be ignored. The help
-// and kept sections are there only when something was asked for or kept:
-// how often a line had to be shown or heard again tells Claude whether the
-// shelf is at the right level. The app never shows these numbers.
+// and later sections are there only when there's something to say: how
+// often, and on which lines (so which verbs, endings, reductions), help was
+// asked tells Claude whether the shelf is at the right level and what to
+// look for next week; "how it felt" is the owner's own word on the video
+// ("-" for a question left alone). At most RSReportLinesPerVideo lines a
+// video. The app never shows any of these numbers.
 
 #import <Foundation/Foundation.h>
 #include <time.h>
@@ -31,6 +40,7 @@
 
 // "shelf-2026-10-12_2026-10-14-2105.txt": the shelf's start, then when.
 NSString *RSReportName(RSShelf *shelf, time_t now);
+extern const NSUInteger RSReportLinesPerVideo;      // 40
 NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_t now);
 // This Mac's name, as in Sharing ("Ashwin’s Mac Pro").
 NSString *RSComputerName(void);

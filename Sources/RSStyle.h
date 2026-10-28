@@ -61,6 +61,15 @@ typedef enum {
 + (void)drawCaptionPlaceholder:(NSString *)text in:(NSRect)videoRect;
 + (void)drawVideoPlaceholderIn:(NSRect)rect;                    // what the shots show where video goes
 
+// ---- After watching: how was it? ----
+// A dark slip at the top of the picture: "This video was  too easy · about
+// right · too hard   more like this · less like this  ✕". The chosen words are
+// shown as chosen; no stars, numbers or marks of any kind.
++ (NSArray *)feedbackChoices;                  // the five, in order (RSFelt..., RSWant...)
++ (NSSize)feedbackPanelSize;
++ (NSArray *)feedbackItemRectsIn:(NSRect)panel; // NSValue rects: the five choices, then the ✕
++ (void)drawFeedbackIn:(NSRect)panel felt:(NSString *)felt want:(NSString *)want hover:(NSInteger)hover;
+
 // ---- The transcript ----
 + (CGFloat)transcriptPadding;
 + (CGFloat)heightOfTranscriptLine:(NSString *)text width:(CGFloat)width;

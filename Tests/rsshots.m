@@ -238,6 +238,15 @@ int main(int argc, const char *argv[])
         [player keepLine];
         printf("  kept     %s\n", [[player visibleNote] UTF8String]);
         ShootBoth([player window], out, @"player-keep");
+        // After watching: how was it? One click each, about the video.
+        [player chooseFeedback:RSFeltAboutRight];
+        [player chooseFeedback:RSWantMore];
+        [player toggleFeedback];
+        printf("  felt     %s / %s, shown %d\n", [[player felt] UTF8String], [[player want] UTF8String], (int)[player feedbackShown]);
+        ShootBoth([player window], out, @"player-feedback");
+        [player chooseFeedback:RSWantMore];
+        printf("  again    want %s; stored %s / %s\n", [player want] ? [[player want] UTF8String] : "(cleared)",
+               [[[c library] feltFor:@"JE4cI_Knzvc"] UTF8String], [[c library] wantFor:@"JE4cI_Knzvc"] ? "set" : "(cleared)");
         [player close];
 
         // Automatic captions, rebuilt into sentences, in the transcript.

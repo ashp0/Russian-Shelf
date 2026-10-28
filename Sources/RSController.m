@@ -427,6 +427,7 @@ static NSString *RSTimeText(time_t t)
                                          subtitles:subtitles position:[watch position] furthest:[watch furthest]
                                           duration:[watch duration]];
     [_player setDelegate:self];
+    [_player setFelt:[_library feltFor:identifier] want:[_library wantFor:identifier]];
     [_player show];
     return _player;
 }
@@ -444,9 +445,16 @@ static NSString *RSTimeText(time_t t)
     [self reloadRows];
 }
 
-- (void)player:(RSPlayer *)player helped:(RSHelp)kind
+- (void)player:(RSPlayer *)player helped:(RSHelp)kind line:(RSLine *)line
 {
-    [_library countHelp:kind for:[player identifier]];
+    [_library countHelp:kind for:[player identifier] line:[line text] start:[line start]];
+    [_library save];
+    _watchChanged = YES;
+}
+
+- (void)player:(RSPlayer *)player felt:(NSString *)felt want:(NSString *)want
+{
+    [_library setFelt:felt want:want for:[player identifier]];
     [_library save];
     _watchChanged = YES;
 }
@@ -623,6 +631,8 @@ static NSString *RSKey(unichar c)
     RSItem(play, @"Slower", @selector(slower:), @"-", 0, self);
     RSItem(play, @"Keep This Line", @selector(keep:), @"k", 0, self);
     [play addItem:[NSMenuItem separatorItem]];
+    RSItem(play, @"How Was This Video?", @selector(feedback:), @"h", 0, self);
+    [play addItem:[NSMenuItem separatorItem]];
     RSItem(play, @"Subtitles Stay On", @selector(subtitles:), @"s", 0, self);
     RSItem(play, @"Transcript", @selector(transcript:), @"t", 0, self);
     RSItem(play, @"Full Screen", @selector(fullScreen:), @"f", 0, self);
@@ -672,5 +682,6 @@ static NSString *RSKey(unichar c)
 - (void)loop:(id)sender       { [_player toggleLoop]; }
 - (void)slower:(id)sender     { [_player toggleSlower]; }
 - (void)keep:(id)sender       { [_player keepLine]; }
+- (void)feedback:(id)sender   { [_player toggleFeedback]; }
 
 @end

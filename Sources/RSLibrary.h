@@ -43,14 +43,28 @@ typedef enum {
 
 extern const double RSFinishedFraction;     // 0.9
 
-// What the player was asked for, counted per video for the report: lines
-// shown (↓), lines heard again (↑ or a loop), lines kept (K). Facts for
-// Claude choosing the next shelf; the app never shows them.
+// What the player was asked for, counted per video for the report, with the
+// line it was asked on: shown (↓), heard again (↑), looped (L), slowed (−,
+// turned on), the transcript opened or a line clicked in it (T), subtitles
+// turned on (S), kept (K). Facts for Claude choosing the next shelf (which
+// lines, so which verbs and endings, needed help); the app never shows them.
 typedef enum {
     RSHelpShown = 0,
     RSHelpHeardAgain,
-    RSHelpKept
+    RSHelpKept,
+    RSHelpLooped,
+    RSHelpSlowed,
+    RSHelpTranscript,
+    RSHelpSubtitles,
+    RSHelpKinds                 // how many kinds there are
 } RSHelp;
+
+NSString *RSHelpName(RSHelp kind);          // "shown", "heard again", "looped", ...
+
+// How a video felt, in the owner's own one-click words: about the video,
+// never about them. nil until chosen; choosing the same again clears it.
+extern NSString *const RSFeltTooEasy, *const RSFeltAboutRight, *const RSFeltTooHard;
+extern NSString *const RSWantMore, *const RSWantLess;
 
 @interface RSLibrary : NSObject
 
@@ -92,7 +106,16 @@ typedef enum {
 - (BOOL)recordPosition:(double)position furthest:(double)furthest duration:(double)duration
                    for:(NSString *)identifier;
 - (void)countHelp:(RSHelp)kind for:(NSString *)identifier;
+// The same, and noted against the line it was asked on (text nil: no line).
+- (void)countHelp:(RSHelp)kind for:(NSString *)identifier line:(NSString *)text start:(double)start;
 - (NSUInteger)help:(RSHelp)kind for:(NSString *)identifier;
+// The lines help was asked on, by time: each {text, start, and a count per
+// RSHelpName}, kind -> NSNumber.
+- (NSArray *)helpedLinesFor:(NSString *)identifier;
+// The owner's choice about the video (RSFelt..., RSWant...), or nil.
+- (NSString *)feltFor:(NSString *)identifier;
+- (NSString *)wantFor:(NSString *)identifier;
+- (void)setFelt:(NSString *)felt want:(NSString *)want for:(NSString *)identifier;
 // The first video on this week's shelf not finished yet, or nil.
 - (NSString *)nextIdentifier;
 
