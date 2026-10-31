@@ -120,5 +120,8 @@ extern NSString *const RSWantMore, *const RSWantLess;
 - (NSString *)nextIdentifier;
 
 - (BOOL)save;
+// Reads State.plist again (what was watched, the notice), after the sync
+// between Macs merged into it. The shelves stay as they are.
+- (void)reload;
 
 @end

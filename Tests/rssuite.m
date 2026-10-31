@@ -1042,6 +1042,8 @@ static void TestRealGit(void)
     Run(Temp(@""), @"rm -rf git git-1.9");
 }
 
+#include "rssuite-sync.m"
+
 int main(int argc, const char *argv[])
 {
     @autoreleasepool {
@@ -1060,6 +1062,7 @@ int main(int argc, const char *argv[])
         TestReports();
         TestSyncMessages();
         TestRealGit();
+        TestSync(fixtures);
         [[NSFileManager defaultManager] removeItemAtPath:Temp(@"") error:NULL];
         printf("%d checks, %d failed\n", checks, failures);
     }

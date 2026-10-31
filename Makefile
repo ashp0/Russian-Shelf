@@ -69,7 +69,7 @@ FRAMEWORKS := -framework Cocoa -framework AVKit -framework AVFoundation -framewo
 
 MODEL_SRC := Sources/RSDate.c Sources/RSKeys.c Sources/RSCrypto.m Sources/RSShelf.m Sources/RSSubtitles.m \
              Sources/RSProcess.m Sources/RSSync.m Sources/RSLibrary.m Sources/RSDownloader.m Sources/RSReport.m \
-             Sources/RSLines.m Sources/RSClip.m
+             Sources/RSLines.m Sources/RSClip.m Sources/RSSyncFolder.m Sources/RSMerge.m Sources/RSSyncManager.m
 VIEW_SRC  := Sources/RSStyle.m Sources/RSShelfView.m Sources/RSPlayer.m Sources/RSReview.m Sources/RSController.m \
              Sources/RSSelfTest.m
 APP_SRC   := $(MODEL_SRC) $(VIEW_SRC) Sources/main.m
@@ -138,7 +138,7 @@ SUITE := $(BUILD)/rssuite
 SHOTS := $(BUILD)/rsshots
 NOW   ?= 2026-10-14 20:30
 
-$(SUITE): Tests/rssuite.m $(MODEL_OBJ)
+$(SUITE): Tests/rssuite.m Tests/rssuite-sync.m $(MODEL_OBJ)
 	@echo "  compile  Tests/rssuite.m"
 	@$(CC) $(OBJCFLAGS) -c Tests/rssuite.m -o $(OBJ)/rssuite.o
 	@$(CC) $(LDBASE) -framework Foundation -framework Security -framework AVFoundation -framework CoreMedia -framework CoreServices \

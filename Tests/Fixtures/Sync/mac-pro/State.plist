@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>clips</key>
+	<dict>
+		<key>vidAAAAAAAA</key>
+		<array>
+			<dict>
+				<key>day</key>
+				<integer>20750</integer>
+				<key>end</key>
+				<real>40.0</real>
+				<key>passes</key>
+				<integer>1</integer>
+				<key>start</key>
+				<real>10.0</real>
+			</dict>
+			<dict>
+				<key>day</key>
+				<integer>20751</integer>
+				<key>end</key>
+				<real>130.0</real>
+				<key>passes</key>
+				<integer>3</integer>
+				<key>start</key>
+				<real>100.0</real>
+			</dict>
+		</array>
+	</dict>
+	<key>futureKey</key>
+	<string>keep me</string>
+	<key>notice</key>
+	<string>A new shelf was turned away. It’s older than the shelf of 2026-10-26.</string>
+	<key>say</key>
+	<dict>
+		<key>20750</key>
+		<dict>
+			<key>island</key>
+			<string>Мой день</string>
+			<key>passes</key>
+			<integer>3</integer>
+			<key>recorded</key>
+			<true/>
+		</dict>
+	</dict>
+	<key>watched</key>
+	<dict>
+		<key>vidAAAAAAAA</key>
+		<dict>
+			<key>duration</key>
+			<real>600.0</real>
+			<key>felt</key>
+			<string>about right</string>
+			<key>finished</key>
+			<false/>
+			<key>furthest</key>
+			<real>400.0</real>
+			<key>lines</key>
+			<dict>
+				<key>4100</key>
+				<dict>
+					<key>shown</key>
+					<integer>1</integer>
+					<key>start</key>
+					<real>4.1</real>
+					<key>text</key>
+					<string>Она отрезала волосы.</string>
+				</dict>
+			</dict>
+			<key>macproOnly</key>
+			<string>kept here</string>
+			<key>position</key>
+			<real>300.0</real>
+			<key>shown</key>
+			<integer>3</integer>
+		</dict>
+		<key>vidBBBBBBBB</key>
+		<dict>
+			<key>duration</key>
+			<real>0.0</real>
+			<key>finished</key>
+			<false/>
+			<key>furthest</key>
+			<real>100.0</real>
+			<key>heardAgain</key>
+			<integer>2</integer>
+			<key>position</key>
+			<real>50.0</real>
+		</dict>
+		<key>vidCCCCCCCC</key>
+		<dict>
+			<key>duration</key>
+			<real>300.0</real>
+			<key>felt</key>
+			<string>too hard</string>
+			<key>finished</key>
+			<false/>
+			<key>furthest</key>
+			<real>200.0</real>
+			<key>position</key>
+			<real>120.0</real>
+		</dict>
+		<key>vidDDDDDDDD</key>
+		<dict>
+			<key>duration</key>
+			<real>200.0</real>
+			<key>finished</key>
+			<false/>
+			<key>furthest</key>
+			<real>10.0</real>
+			<key>position</key>
+			<real>10.0</real>
+		</dict>
+	</dict>
+</dict>
+</plist>
