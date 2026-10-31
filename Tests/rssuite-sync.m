@@ -159,8 +159,16 @@ static void TestSyncMerge(NSString *fixtures)
     NSDictionary *mc = [RSMerge cards:ca with:cb];
     NSDictionary *k1 = CardNamed(mc, @"vidAAAAAAAA-0000004100");
     CHECK([[k1 objectForKey:@"heard"] longValue] == T && [[k1 objectForKey:@"lapses"] intValue] == 1 && [[k1 objectForKey:@"step"] intValue] == 0 &&
-          [[k1 objectForKey:@"kind"] isEqualToString:@"line"] && [k1 objectForKey:@"macproNote"] == nil,
-          "heard later there: their card, whole, unknown keys too");
+          [[k1 objectForKey:@"kind"] isEqualToString:@"line"] && [[k1 objectForKey:@"title"] isEqualToString:@"T vidAAAAAAAA"],
+          "heard later there: their card, unknown keys too");
+    CHECK([[k1 objectForKey:@"macproNote"] isEqualToString:@"mine"], "a key only this Mac's card has stays (an older Shelf drops keys)");
+    NSMutableDictionary *stripped = [NSMutableDictionary dictionaryWithDictionary:CardNamed(cb, @"слово-vidEEEEEEEE-0000005000")];
+    for (NSString *key in [NSArray arrayWithObjects:@"kind", @"word", @"lemma", @"gloss", @"rank", nil]) [stripped removeObjectForKey:key];
+    [stripped setObject:[NSNumber numberWithLong:T] forKey:@"heard"];
+    NSDictionary *old = [NSDictionary dictionaryWithObject:[NSArray arrayWithObject:stripped] forKey:@"lines"];
+    NSDictionary *healed = CardNamed([RSMerge cards:cb with:old], @"слово-vidEEEEEEEE-0000005000");
+    CHECK([[healed objectForKey:@"heard"] longValue] == T && [[healed objectForKey:@"lemma"] isEqualToString:@"сло́во"] &&
+          [[healed objectForKey:@"kind"] isEqualToString:@"word"], "an older Mac hearing a word's card last doesn't erase the word");
     CHECK([[k1 objectForKey:@"meaning"] isEqualToString:@"She cut her hair."], "with the meaning written here, theirs having none");
     CHECK([[CardNamed(mc, @"vidAAAAAAAA-0000010000") objectForKey:@"step"] intValue] == 2 &&
           [[CardNamed(mc, @"vidAAAAAAAA-0000010000") objectForKey:@"due"] longValue] == T + 5, "heard the same day: the higher step");

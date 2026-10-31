@@ -24,11 +24,13 @@
 //   notice, anything else  this Mac's.
 //
 // Lines.plist (RSLines; the cards):
-//   by key: the card heard later (`heard`) wins whole, every key in it; if
-//   both were heard the same day: the higher step, then the one put away,
-//   then more lapses, then this Mac's. A card put away on either Mac stays
-//   put away (nothing ever takes a card back out). If the winner has no
-//   meaning, the other's is taken. A card only one Mac has is kept. The
+//   by key: the card heard later (`heard`) wins, every key in it; if both
+//   were heard the same day: the higher step, then the one put away, then
+//   more lapses, then this Mac's. A key only the losing card has is kept (a
+//   Mac with an older Shelf saves cards without keys it doesn't know). A
+//   card put away on either Mac stays put away (nothing ever takes a card
+//   back out). If the winner has no meaning, the other's is taken (an empty
+//   one counts as none). A card only one Mac has is kept. The
 //   cards are in the order they were kept (`kept`, then key), so both Macs
 //   list them alike. heardDay and heardCount are this Mac's day, and stay.
 //

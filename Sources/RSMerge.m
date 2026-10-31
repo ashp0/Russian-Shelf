@@ -172,6 +172,11 @@ static NSComparisonResult RSCompareCards(NSDictionary *l, NSDictionary *r)
     BOOL theirs = RSCompareCards(l, r) == NSOrderedDescending;
     NSDictionary *winner = theirs ? r : l, *other = theirs ? l : r;
     NSMutableDictionary *m = [[winner mutableCopy] autorelease];
+    // A key only the other card has stays: a Mac running an older Shelf
+    // saves its cards without the keys it doesn't know, and must not erase
+    // them everywhere by hearing a card last.
+    for (id key in other)
+        if ([m objectForKey:key] == nil) [m setObject:[other objectForKey:key] forKey:key];
     if ([[other objectForKey:@"putAway"] boolValue]) [m setObject:[NSNumber numberWithBool:YES] forKey:@"putAway"];
     if (RSText(winner, @"meaning") == nil && RSText(other, @"meaning")) [m setObject:RSText(other, @"meaning") forKey:@"meaning"];
     return m;

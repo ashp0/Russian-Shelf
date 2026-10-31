@@ -414,9 +414,11 @@ Macs end alike):
   Clips: one per stretch, the one with more passes. Say: by day, this Mac's
   day if it has one. The notice, and anything the merge doesn't know: this
   Mac's.
-- **Cards**, by key: the card heard most recently wins whole, unknown keys
+- **Cards**, by key: the card heard most recently wins, unknown keys
   included. If both were heard the same day, the higher step wins, then the
-  one put away, then the one with more lapses. A card put away on either Mac
+  one put away, then the one with more lapses. A key only the other card has
+  is kept, so a Mac running an older Shelf, which saves its cards without
+  keys it doesn't know, can't erase a word's details everywhere. A card put away on either Mac
   stays put away, since nothing ever takes a card back out. A meaning
   written on either Mac is kept. A card only one Mac has is kept, with its
   sound. Cards are in the order kept. Today's count of cards heard is each
