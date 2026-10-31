@@ -247,6 +247,26 @@ static BOOL RSSays(NSString *haystack, NSString *needle)
     return result;
 }
 
++ (NSDictionary *)entriesAt:(NSString *)rev folder:(NSString *)folder
+{
+    NSString *git = [RSSync gitPath];
+    if ([RSSync checkFolder:folder git:git] || [rev length] == 0) return nil;
+    NSString *prefix = [[self syncFolder] stringByAppendingString:@"/"];
+    // "040000 tree <id>\tRussian/Sync/<name>", NUL-terminated; nothing for a missing folder.
+    RSProcessResult *r = [RSSync git:git in:folder args:[NSArray arrayWithObjects:@"ls-tree", @"-z", rev, prefix, nil] extra:nil];
+    if ([r status] != 0) return nil;
+    NSMutableDictionary *entries = [NSMutableDictionary dictionary];
+    for (NSString *entry in [[r output] componentsSeparatedByString:@"\0"]) {
+        NSRange tab = [entry rangeOfString:@"\t"];
+        if (tab.location == NSNotFound) continue;
+        NSArray *fields = [[entry substringToIndex:tab.location] componentsSeparatedByString:@" "];
+        NSString *path = [entry substringFromIndex:NSMaxRange(tab)];
+        if ([fields count] != 3 || ![path hasPrefix:prefix]) continue;
+        [entries setObject:[fields objectAtIndex:2] forKey:[path substringFromIndex:[prefix length]]];
+    }
+    return entries;
+}
+
 + (BOOL)copyOtherHosts:(NSString *)slug from:(NSString *)folder into:(NSString *)destination problem:(NSString **)problem
 {
     NSString *git = [RSSync gitPath];

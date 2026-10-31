@@ -16,12 +16,15 @@
 // Say/Today/ is each Mac's own and never goes anywhere. The rules for
 // merging are in RSMerge.h. The round, after each successful pull:
 //
-//   1. (background) -takeOtherHosts: Sync In/ from the clone
+//   1. (background) -takeOtherHosts: Sync In/ from the clone (not read
+//      again while the other Macs' folders at HEAD are as they were)
 //   2. (main thread, with the library and the cards saved first, so nothing
 //      done on this Mac is lost) -mergeInCards: into the files on disk;
 //      then the app reads them again
 //   3. (main thread) -stage: Sync Out/ from the files on disk
 //   4. (background) -publish: Russian/Sync/<host>/ = Sync Out/, pushed
+//      (nothing, not even a fetch, while Sync Out and this Mac's folder
+//      upstream are as the last publish left them)
 //
 // Background steps run on +gitQueue, as the reports' push does: never two
 // gits of this app at once in the clone.

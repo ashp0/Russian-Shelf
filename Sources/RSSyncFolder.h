@@ -48,4 +48,10 @@
 + (BOOL)copyOtherHosts:(NSString *)slug from:(NSString *)studyFolder into:(NSString *)destination
                problem:(NSString **)problem;
 
+// Synchronous. What Russian/Sync holds at `rev` ("HEAD", "@{u}"), one git:
+// each entry's name ("macbook") -> its object id, from which a round can
+// tell nothing changed there. Empty if there's no Russian/Sync; nil if git
+// couldn't say (no such revision, no upstream).
++ (NSDictionary *)entriesAt:(NSString *)rev folder:(NSString *)studyFolder;
+
 @end

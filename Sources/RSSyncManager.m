@@ -3,7 +3,13 @@
 #import "RSMerge.h"
 #import "RSSync.h"
 
-@interface RSSyncManager ()
+@interface RSSyncManager () {
+    // What the last rounds found, so a round where nothing changed does no
+    // more than look (on +gitQueue only; forgotten when the app quits).
+    NSDictionary *_taken;       // the other hosts' entries at HEAD when Sync In was last written
+    NSArray *_sent;             // Sync Out (path, size, date) at the last good publish
+    NSString *_sentEntry;       // this Mac's folder in the upstream branch just after it
+}
 @property (nonatomic, readwrite, copy) NSString *appFolder, *studyFolder, *host;
 @end
 
@@ -98,6 +104,9 @@ static BOOL RSWriteText(NSString *text, NSString *path)
     [_studyFolder release];
     [_host release];
     [_note release];
+    [_taken release];
+    [_sent release];
+    [_sentEntry release];
     [super dealloc];
 }
 
@@ -112,7 +121,18 @@ static BOOL RSWriteText(NSString *text, NSString *path)
 
 - (BOOL)takeOtherHosts:(NSString **)problem
 {
-    return [RSSyncFolder copyOtherHosts:_host from:_studyFolder into:[self inFolder] problem:problem];
+    // The other Macs' folders as they were when Sync In was written: then
+    // Sync In is still what git archive would give, and it isn't read again.
+    NSMutableDictionary *entries = [[[RSSyncFolder entriesAt:@"HEAD" folder:_studyFolder] mutableCopy] autorelease];
+    [entries removeObjectForKey:_host];
+    BOOL folder = NO;
+    if (entries && [entries isEqual:_taken] &&
+        [[NSFileManager defaultManager] fileExistsAtPath:[self inFolder] isDirectory:&folder] && folder)
+        return YES;
+    BOOL taken = [RSSyncFolder copyOtherHosts:_host from:_studyFolder into:[self inFolder] problem:problem];
+    [_taken release];
+    _taken = taken ? [entries copy] : nil;
+    return taken;
 }
 
 + (NSArray *)hostsIn:(NSString *)hostsFolder except:(NSString *)slug
@@ -244,9 +264,45 @@ static BOOL RSCopyMissing(NSString *remote, NSString *local, NSArray *names)
     }
 }
 
+// Each file in Sync Out with its size and date: -stage copies a file only
+// when these differ, keeping the source's date, so the same list is the
+// same files.
+- (NSArray *)outList
+{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray *files = [RSSyncFolder filesIn:[self outFolder]];
+    if (files == nil) return nil;
+    NSMutableArray *list = [NSMutableArray array];
+    for (NSString *relative in files) {
+        NSDictionary *a = [fm attributesOfItemAtPath:[[self outFolder] stringByAppendingPathComponent:relative] error:NULL];
+        if (a == nil) return nil;
+        [list addObject:[NSArray arrayWithObjects:relative, [NSNumber numberWithUnsignedLongLong:[a fileSize]],
+                         [a fileModificationDate] ?: [NSDate distantPast], nil]];
+    }
+    return list;
+}
+
 - (RSSyncResult *)publish
 {
-    return [RSSyncFolder publish:[self outFolder] host:_host folder:_studyFolder];
+    // Sync Out as it was at the last good publish, and this Mac's folder
+    // upstream as that left it (the pull before the round has just fetched
+    // it): the publish would find nothing to change, so it isn't made, nor
+    // its fetch.
+    NSArray *list = [self outList];
+    NSString *there = [[RSSyncFolder entriesAt:@"@{u}" folder:_studyFolder] objectForKey:_host];
+    if (list && _sent && [list isEqual:_sent] && there && [there isEqualToString:_sentEntry]) {
+        RSSyncResult *same = [[[RSSyncResult alloc] init] autorelease];
+        [same setOk:YES];
+        [same setSummary:@"Synced with the other Mac."];
+        [same setOutput:@""];
+        return same;
+    }
+    RSSyncResult *result = [RSSyncFolder publish:[self outFolder] host:_host folder:_studyFolder];
+    [_sent release];
+    [_sentEntry release];
+    _sent = [result ok] ? [list copy] : nil;
+    _sentEntry = [result ok] ? [[[RSSyncFolder entriesAt:@"@{u}" folder:_studyFolder] objectForKey:_host] copy] : nil;
+    return result;
 }
 
 // ---- The brakes -------------------------------------------------------------------------

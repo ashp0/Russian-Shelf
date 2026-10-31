@@ -346,10 +346,12 @@ static void TestSyncRealGit(NSString *fixtures)
     // other Mac push just before this one does.
     NSString *oldGit = Temp(@"git-1.9-sync");
     NSString *race = Temp(@"race.sh");
+    NSString *calls = Temp(@"git-calls.txt");      // each command the app runs, one a line
     [[NSString stringWithFormat:@"#!/bin/sh\n"
+      @"echo \"$1\" >> '%@'\n"
       @"if [ \"$1\" = update-index ]; then for a; do case \"$a\" in *,*,*) echo 'usage: git update-index [options] [--] [<file>...]' >&2; exit 129;; esac; done; fi\n"
       @"if [ \"$1\" = push ] && [ -f '%@' ]; then mv '%@' '%@.running' && sh '%@.running' >/dev/null 2>&1; rm -f '%@.running'; fi\n"
-      @"exec '%@' \"$@\"\n", race, race, race, race, race, git] writeToFile:oldGit atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+      @"exec '%@' \"$@\"\n", calls, race, race, race, race, race, git] writeToFile:oldGit atomically:YES encoding:NSUTF8StringEncoding error:NULL];
     chmod([oldGit fileSystemRepresentation], 0755);
     [[NSUserDefaults standardUserDefaults] registerDefaults:[NSDictionary dictionaryWithObject:oldGit forKey:@"GitPath"]];
 
@@ -400,6 +402,32 @@ static void TestSyncRealGit(NSString *fixtures)
           [[r output] UTF8String]);
     r = Round(a);
     CHECK([r ok] && ![r changed] && [Capture(base, originHead) isEqualToString:head], "on either Mac");
+
+    // Then a round where nothing changed only looks: the pull and two
+    // listings; no archive, no fetch, no publish, and Sync In stays as it was.
+    NSString *left = [appA stringByAppendingPathComponent:@"Sync In/macbook/left.txt"];
+    [@"left" writeToFile:left atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    [@"" writeToFile:calls atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    r = Round(a);
+    NSString *ran = [[Text(calls) stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]]
+                     stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    CHECK([r ok] && ![r changed] && [[r summary] isEqualToString:@"Synced with the other Mac."] &&
+          [ran isEqualToString:@"pull ls-tree ls-tree"], "nothing changed: a pull and two looks (%s)", [ran UTF8String]);
+    CHECK([fm fileExistsAtPath:left] && [Capture(base, originHead) isEqualToString:head], "Sync In isn't written again; nothing is sent");
+    // The other Mac's folder changes: it's read again, and merged.
+    Run(studyB, [NSString stringWithFormat:@"%@ pull -q --ff-only && echo 'Погода' >> Russian/Sync/macbook/Islands.txt && "
+                 @"%@ commit -q -am 'the MacBook: an island' && %@ push -q origin HEAD:main", g, g, g]);
+    r = Round(a);
+    CHECK([r ok] && ![fm fileExistsAtPath:left] && Has(Text([appA stringByAppendingPathComponent:@"Say/Islands.txt"]), @"Погода"),
+          "a change in the other Mac's folder: read again and merged (%s)", [[r summary] UTF8String]);
+    // This Mac's folder changed upstream by someone else: the round puts it back.
+    Run(studyB, [NSString stringWithFormat:@"%@ pull -q --ff-only && %@ rm -q Russian/Sync/mac-pro/Tutor.txt && "
+                 @"%@ commit -q -m 'not the Mac Pro' && %@ push -q origin HEAD:main", g, g, g, g]);
+    r = Round(a);
+    CHECK([r ok] && [r changed] && [fm fileExistsAtPath:[studyA stringByAppendingPathComponent:@"Russian/Sync/mac-pro/Tutor.txt"]],
+          "this Mac's folder not as it left it: published again (%s)", [[r summary] UTF8String]);
+    r = Round(b);
+    CHECK([r ok], "(the MacBook takes it in: %s)", [[r summary] UTF8String]);
 
     NSDictionary *la = Plist([appA stringByAppendingPathComponent:@"Lines/Lines.plist"]), *lb = Plist([appB stringByAppendingPathComponent:@"Lines/Lines.plist"]);
     CHECK([[la objectForKey:@"lines"] count] == 8 && [[la objectForKey:@"lines"] isEqual:[lb objectForKey:@"lines"]],
@@ -465,7 +493,7 @@ static void TestSyncRealGit(NSString *fixtures)
           ![[RSSyncFolder publish:[a outFolder] host:@"../reports" folder:studyA] ok], "a name that isn't a Mac's folder is refused");
     CHECK(![[RSSyncFolder publish:Temp(@"no-such-folder") host:@"mac-pro" folder:studyA] ok], "no staging folder: nothing is sent");
     [[NSUserDefaults standardUserDefaults] registerDefaults:[NSDictionary dictionaryWithObject:@"" forKey:@"GitPath"]];
-    Run(Temp(@""), @"rm -rf sync-git git-1.9-sync race.sh");
+    Run(Temp(@""), @"rm -rf sync-git git-1.9-sync race.sh git-calls.txt");
 }
 
 static void TestSync(NSString *fixtures)
