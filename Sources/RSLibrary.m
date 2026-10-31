@@ -1,4 +1,5 @@
 #import "RSLibrary.h"
+#import "RSDate.h"
 #import "RSSubtitles.h"
 #include <math.h>
 
@@ -326,8 +327,15 @@ static NSString *RSFirstFile(NSString *folder, NSString *prefix, NSArray *extens
     [w setObject:[NSNumber numberWithDouble:far] forKey:@"furthest"];
     [w setObject:[NSNumber numberWithDouble:MAX(0, duration)] forKey:@"duration"];
     [w setObject:[NSNumber numberWithBool:finished] forKey:@"finished"];
+    if (finished && ![old finished]) [w setObject:[NSNumber numberWithLong:RSToday()] forKey:@"finishedDay"];
     [_watched setObject:w forKey:identifier];
     return finished && ![old finished];
+}
+
+- (BOOL)finishedOnDay:(long)day video:(NSString *)identifier
+{
+    NSDictionary *w = [_watched objectForKey:identifier];
+    return [[w objectForKey:@"finished"] boolValue] && [[w objectForKey:@"finishedDay"] longValue] == day;
 }
 
 NSString *const RSFeltTooEasy = @"too easy", *const RSFeltAboutRight = @"about right", *const RSFeltTooHard = @"too hard";

@@ -133,6 +133,17 @@ typedef enum {
 + (NSRect)reviewMeaningRectIn:(NSRect)rect note:(BOOL)note;
 + (void)styleMeaningField:(NSTextField *)field;
 
+// ---- Say (RSSayWindow) ----
+// An index card with a sand-glass: the topic, which pass and how long is
+// left, a note, and the keys. `fraction`: how much sand is left (1 = full).
+// `editing`: the islands are being written on the card (leave the body clear).
++ (NSSize)sayWindowSize;
++ (NSRect)sayBodyRectIn:(NSRect)rect;                           // where the islands text view goes
++ (NSRect)sayNoteRectIn:(NSRect)rect;                           // where the tutor's note is typed
++ (void)drawSayIn:(NSRect)rect heading:(NSString *)heading topic:(NSString *)topic passText:(NSString *)passText
+         timeLeft:(NSString *)timeLeft fraction:(double)fraction recording:(BOOL)recording message:(NSString *)message
+             note:(NSString *)note noteRow:(BOOL)noteRow editing:(BOOL)editing keys:(NSArray *)keys;
+
 // ---- Shared ----
 + (NSString *)clock:(double)seconds;                            // "4:10"
 

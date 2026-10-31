@@ -45,6 +45,8 @@
 NSString *RSReportName(RSShelf *shelf, time_t now);
 extern const NSUInteger RSReportLinesPerVideo;      // 40
 NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_t now);
+// The same, with the owner's notes for the tutor (RSSay's Tutor.txt) at the end.
+NSString *RSReportTextWithNotes(RSShelf *shelf, RSLibrary *library, RSLines *lines, NSString *tutor, time_t now);
 // This Mac's name, as in Sharing ("Ashwin’s Mac Pro").
 NSString *RSComputerName(void);
 // "4:10", "1:02:03".

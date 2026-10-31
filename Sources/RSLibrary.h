@@ -106,6 +106,8 @@ extern NSString *const RSWantMore, *const RSWantLess;
 // Returns YES if this made the video finished.
 - (BOOL)recordPosition:(double)position furthest:(double)furthest duration:(double)duration
                    for:(NSString *)identifier;
+// Whether the video was finished on that day (the day it first reached 90%).
+- (BOOL)finishedOnDay:(long)day video:(NSString *)identifier;
 - (void)countHelp:(RSHelp)kind for:(NSString *)identifier;
 // The same, and noted against the line it was asked on (text nil: no line).
 - (void)countHelp:(RSHelp)kind for:(NSString *)identifier line:(NSString *)text start:(double)start;

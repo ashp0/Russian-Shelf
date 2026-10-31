@@ -26,6 +26,7 @@
 #import "RSClip.h"
 #import "RSDictionary.h"
 #import "RSClips.h"
+#import "RSSay.h"
 
 static int failures = 0, checks = 0;
 
@@ -706,6 +707,12 @@ static void TestReports(void)
     [lines keepWord:@"отрезала" lemma:@"отре\u0301зать" gloss:@"cut off" rank:4100 inLine:@"Она отрезала\nволосы." before:nil video:Id(2)
              title:@"Story" start:250.4 end:252 today:100 problem:NULL];
     [library recordClip:Id(2) start:130 end:280 passes:3 day:RSDaysFromCivil(2026, 10, 14)];
+    [library recordSayOnDay:RSDaysFromCivil(2026, 10, 14) island:@"Мой день" passes:3 recorded:YES];
+    [library recordSayOnDay:RSDaysFromCivil(2026, 10, 1) island:@"before the shelf" passes:3 recorded:YES];
+    text = RSReportTextWithNotes([library current], library, lines, @"## 2026-10-14\nя путаю падежи\n", when);
+    CHECK(Has(text, @"\nSaid (day | topic | passes of 3 | recorded):\n2026-10-14 | Мой день | passes 3 | recorded\n") && !Has(text, @"before the shelf"),
+          "said section, this shelf's days only:\n%s", [text UTF8String]);
+    CHECK(Has(text, @"\nFor the tutor:\n## 2026-10-14\nя путаю падежи\n"), "the tutor's notes");
     text = RSReportText([library current], library, lines, when);
     CHECK(Has(text, [NSString stringWithFormat:@"\nClips worked (stretch | passes of 3 | day):\n%@ | 2:10–4:40 | passes 3 | day 2026-10-14\n", Id(2)]),
           "clips section:\n%s", [text UTF8String]);
@@ -1029,6 +1036,73 @@ static void TestClips(NSString *fixtures)
     CHECK([[again clipsFor:@"JE4cI_Knzvc"] count] == 2 && [again clipOnDay:100] != nil, "clips are saved");
 }
 
+// ---- Say ------------------------------------------------------------------------
+
+static void TestSay(void)
+{
+    NSString *folder = Temp(@"say");
+    [[NSFileManager defaultManager] removeItemAtPath:folder error:NULL];
+    RSSay *say = [[[RSSay alloc] initWithFolder:folder] autorelease];
+    NSArray *islands = [say islands];
+    CHECK([islands count] == 8 && [[islands objectAtIndex:0] isEqualToString:@"Мой день"] && Has([islands lastObject], @"русский"),
+          "the islands are seeded: %lu", (unsigned long)[islands count]);
+    long day = RSDaysFromCivil(2026, 11, 3);
+    CHECK([[say islandForDay:day] length] && ![[say islandForDay:day] isEqualToString:[say islandForDay:day + 1]] &&
+          [[say islandForDay:day] isEqualToString:[say islandForDay:day + 8]], "a different island each day, round again after eight");
+    CHECK(([say saveIslands:[NSArray arrayWithObjects:@"  Погода ", @"", @"Музыка", nil]] && [[say islands] count] == 2 &&
+           [[[say islands] objectAtIndex:0] isEqualToString:@"Погода"]), "islands are rewritten, blanks dropped, edges trimmed");
+    CHECK([say saveIslands:[NSArray array]] && [say islandForDay:day] == nil, "no islands, no topic");
+
+    // Lengths.
+    CHECK([[RSSayLengths(0) objectAtIndex:0] intValue] == 120 && [[RSSayLengths(0) objectAtIndex:2] intValue] == 60 &&
+          [[RSSayLengths(2) objectAtIndex:0] intValue] == 240 && [RSSayLengthsText(1) isEqualToString:@"3·2·1½"] &&
+          [[RSSayLengths(9) objectAtIndex:0] intValue] == 120, "the three settings, and the default for an unknown one");
+
+    // The month's recording: the first kept, never overwritten; last month's found.
+    NSString *pass = [say passPath:3];
+    [@"sound" writeToFile:pass atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    CHECK([say hasPass:3] && ![say hasPass:2], "a pass on disk");
+    CHECK(![say hasMonthRecordingForDay:day] && [say keepMonthRecording:pass forDay:day] && [say hasMonthRecordingForDay:day] &&
+          [[say monthRecordingPathForDay:day] hasSuffix:@"Recordings/2026-11.m4a"], "kept as November's");
+    [@"later" writeToFile:pass atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    CHECK(![say keepMonthRecording:pass forDay:day + 10] &&
+          [[NSString stringWithContentsOfFile:[say monthRecordingPathForDay:day] encoding:NSUTF8StringEncoding error:NULL] isEqualToString:@"sound"],
+          "the month's first stays");
+    NSString *month = nil;
+    CHECK([say previousMonthRecordingBeforeDay:day month:&month] == nil, "no earlier month yet");
+    long december = RSDaysFromCivil(2026, 12, 5);
+    CHECK([[say previousMonthRecordingBeforeDay:december month:&month] hasSuffix:@"2026-11.m4a"] && [month isEqualToString:@"2026-11"],
+          "in December, November's is last month's");
+    [say keepMonthRecording:pass forDay:RSDaysFromCivil(2026, 9, 1)];
+    CHECK([[say previousMonthRecordingBeforeDay:december month:&month] hasSuffix:@"2026-11.m4a"], "the newest earlier month wins");
+    CHECK([RSMonthText(day) isEqualToString:@"2026-11"], "month text");
+
+    // Today's passes go at midnight.
+    [say clearPassesNotFrom:day + 1];
+    CHECK(![say hasPass:3], "a pass from another day is cleared");
+
+    // Notes for the tutor, under the day's heading.
+    CHECK([say addTutorNote:@"  я путаю винительный и родительный \n" day:day] && [say addTutorNote:@"глагол «класть»" day:day] &&
+          [say addTutorNote:@"second day" day:day + 1] && ![say addTutorNote:@"   " day:day + 1], "notes are kept, blanks aren't");
+    CHECK([[say tutorNotes] isEqualToString:@"## 2026-11-03\nя путаю винительный и родительный\nглагол «класть»\n\n## 2026-11-04\nsecond day\n"],
+          "the notes file:\n%s", [[say tutorNotes] UTF8String]);
+    CHECK([[say tutorNotesForDay:day] count] == 2 && [[say tutorNotesForDay:day + 1] count] == 1 && [[say tutorNotesForDay:day + 2] count] == 0,
+          "notes by day");
+
+    // The library remembers what was said.
+    NSString *lib = Temp(@"say-library");
+    [[NSFileManager defaultManager] removeItemAtPath:lib error:NULL];
+    RSLibrary *library = [[[RSLibrary alloc] initWithFolder:lib aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    CHECK([library sayOnDay:day] == nil && [[library sayDays] count] == 0, "nothing said yet");
+    [library recordSayOnDay:day island:@"Мой день" passes:1 recorded:YES];
+    [library recordSayOnDay:day island:@"Мой день" passes:3 recorded:YES];
+    [library recordSayOnDay:day - 1 island:@"Еда" passes:2 recorded:NO];
+    [library save];
+    RSLibrary *again = [[[RSLibrary alloc] initWithFolder:lib aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    CHECK([[[again sayOnDay:day] objectForKey:@"passes"] intValue] == 3 && [[[again sayOnDay:day] objectForKey:@"island"] isEqualToString:@"Мой день"] &&
+          [[again sayDays] count] == 2 && [[[again sayDays] objectAtIndex:0] longValue] == day - 1, "said days are saved, in order");
+}
+
 // ---- Cutting a line's sound ------------------------------------------------
 
 // Four seconds of a 440 Hz tone, as a WAV file.
@@ -1224,6 +1298,7 @@ int main(int argc, const char *argv[])
         TestLines();
         TestDictionary(fixtures);
         TestClips(fixtures);
+        TestSay();
         TestClip();
         TestCommandLines();
         TestReports();

@@ -1286,4 +1286,162 @@ static NSRect RSReviewCard(NSRect rect)
     }
 }
 
+// ---- Say ----------------------------------------------------------------------------
+//
+// The same index card as the review's, with a brass-framed sand-glass on the
+// right while a pass runs.
+
++ (NSSize)sayWindowSize { return NSMakeSize(640, 420); }
+
+static NSRect RSSayCard(NSRect rect)
+{
+    return RSReviewCard(rect);
+}
+
++ (NSRect)sayBodyRectIn:(NSRect)rect
+{
+    NSRect card = RSSayCard(rect);
+    return NSMakeRect(NSMinX(card) + 24, NSMinY(card) + 20, NSWidth(card) - 48, NSHeight(card) - 44 - 20 - 20);
+}
+
++ (NSRect)sayNoteRectIn:(NSRect)rect
+{
+    NSRect card = RSSayCard(rect);
+    return NSMakeRect(NSMinX(card) + 24, NSMinY(card) + 14, NSWidth(card) - 48, 24);
+}
+
+// A sand-glass: two bulbs in a brass frame, the sand draining from the top
+// bulb into the bottom one.
+static void RSDrawSandGlass(NSRect box, double fraction)
+{
+    fraction = MAX(0, MIN(1, fraction));
+    BOOL flipped = RSFlipped();
+    CGFloat w = NSWidth(box), h = NSHeight(box), x = NSMinX(box);
+    CGFloat top = flipped ? NSMinY(box) : NSMaxY(box), dir = flipped ? 1 : -1;
+    CGFloat waist = h / 2;
+    NSBezierPath *upper = [NSBezierPath bezierPath], *lower = [NSBezierPath bezierPath];
+    [upper moveToPoint:NSMakePoint(x + 3, top + dir * 3)];
+    [upper lineToPoint:NSMakePoint(x + w - 3, top + dir * 3)];
+    [upper lineToPoint:NSMakePoint(x + w / 2 + 2, top + dir * waist)];
+    [upper lineToPoint:NSMakePoint(x + w / 2 - 2, top + dir * waist)];
+    [upper closePath];
+    [lower moveToPoint:NSMakePoint(x + w / 2 - 2, top + dir * waist)];
+    [lower lineToPoint:NSMakePoint(x + w / 2 + 2, top + dir * waist)];
+    [lower lineToPoint:NSMakePoint(x + w - 3, top + dir * (h - 3))];
+    [lower lineToPoint:NSMakePoint(x + 3, top + dir * (h - 3))];
+    [lower closePath];
+    // Glass.
+    [RSRGB(0xffffff, 0.35) set];
+    [upper fill];
+    [lower fill];
+    // Sand: the top bulb's level by the fraction left; the bottom bulb's by what has run.
+    [NSGraphicsContext saveGraphicsState];
+    [upper addClip];
+    CGFloat upperHeight = waist - 3, sandTop = top + dir * (3 + upperHeight * (1 - fraction));
+    [RSRGB(0xd8b36a, 1) set];
+    NSRectFill(flipped ? NSMakeRect(x, sandTop, w, top + waist - sandTop) : NSMakeRect(x, top - waist, w, sandTop - (top - waist)));
+    [NSGraphicsContext restoreGraphicsState];
+    [NSGraphicsContext saveGraphicsState];
+    [lower addClip];
+    CGFloat lowerHeight = h - 3 - waist, pile = lowerHeight * (1 - fraction);
+    CGFloat bottom = top + dir * (h - 3);
+    [RSRGB(0xd8b36a, 1) set];
+    NSRectFill(flipped ? NSMakeRect(x, bottom - pile, w, pile) : NSMakeRect(x, bottom, w, pile));
+    if (fraction > 0 && fraction < 1) {
+        // The falling thread.
+        [RSRGB(0xd8b36a, 0.9) set];
+        NSRectFill(NSMakeRect(x + w / 2 - 0.75, MIN(top + dir * waist, bottom - (flipped ? pile : -pile)), 1.5,
+                              fabs(lowerHeight - pile)));
+    }
+    [NSGraphicsContext restoreGraphicsState];
+    [RSRGB(0x6b4f18, 0.9) set];
+    [upper setLineWidth:1];
+    [lower setLineWidth:1];
+    [upper stroke];
+    [lower stroke];
+    // Brass plates top and bottom.
+    for (int i = 0; i < 2; i++) {
+        NSRect plate = NSMakeRect(x, i == 0 ? (flipped ? top : top - 5) : (flipped ? bottom - 0 : bottom - 5), w, 5);
+        NSGradient *brass = [[[NSGradient alloc] initWithStartingColor:RSRGB(0xf6e3a4, 1) endingColor:RSRGB(0xb08636, 1)] autorelease];
+        RSDrawDown(brass, plate);
+        [RSRGB(0x6b4f18, 0.9) set];
+        NSFrameRect(plate);
+    }
+}
+
++ (void)drawSayIn:(NSRect)rect heading:(NSString *)heading topic:(NSString *)topic passText:(NSString *)passText
+         timeLeft:(NSString *)timeLeft fraction:(double)fraction recording:(BOOL)recording message:(NSString *)message
+             note:(NSString *)note noteRow:(BOOL)noteRow editing:(BOOL)editing keys:(NSArray *)keys
+{
+    CGFloat bar = [self hintBarHeight];
+    NSRect wall = rect;
+    wall.origin.y += bar;
+    wall.size.height -= bar;
+    RSDrawBack(wall);
+    RSDrawCastShadow(wall, 10);
+    RSDrawPlank(NSMakeRect(NSMinX(wall), NSMinY(wall), NSWidth(wall), RSPlankHeight));
+    [self drawHintBarIn:RSBottomStrip(rect, bar) items:keys];
+
+    NSRect card = RSSayCard(rect);
+    RSDrawCard(card, 0, YES);
+    CGFloat pad = 24, width = NSWidth(card) - 2 * pad;
+    CGFloat ruleY = NSMaxY(card) - 44;
+    [RSRGB(0xa9c4e0, 0.55) set];
+    for (CGFloat y = ruleY - 30; y > NSMinY(card) + 14; y -= 30)
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(card) + 1, y, NSWidth(card) - 2, 1), NSCompositeSourceOver);
+    [RSRGB(0xe08a8a, 0.85) set];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(card) + 1, ruleY, NSWidth(card) - 2, 1), NSCompositeSourceOver);
+    NSDictionary *h = RSText(RSSerifBold(16), RSInk(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+    RSDrawText(heading ?: @"", h, NSMakeRect(NSMinX(card) + pad, ruleY + 10, width, 22));
+    if (editing) return;        // the text view fills the body
+
+    CGFloat glassWidth = [timeLeft length] ? 150 : 0;
+    CGFloat textWidth = width - glassWidth;
+    CGFloat top = ruleY - 14;
+    if ([passText length]) {
+        NSDictionary *p = RSText(RSSerifItalic(13), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText(passText, p, NSMakeRect(NSMinX(card) + pad, top - 18, textWidth, 18));
+        top -= 26;
+    }
+    CGFloat bottom = NSMinY(card) + ([note length] ? 34 : 16) + (noteRow ? 30 : 0);
+    NSRect body = NSMakeRect(NSMinX(card) + pad, bottom, textWidth, MAX(0, top - bottom));
+    if ([topic length]) {
+        NSDictionary *t = RSText(RSSerif(26), RSInk(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+        CGFloat th = MIN(NSHeight(body), RSHeightOf(topic, t, textWidth));
+        CGFloat mh = [message length] ? 40 : 0;
+        RSDrawText(topic, t, NSMakeRect(NSMinX(body), round(NSMidY(body) - (th - mh) / 2), textWidth, th));
+        if (mh) {
+            NSDictionary *m = RSText(RSSerif(14), RSInkSoft(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+            RSDrawText(message, m, NSMakeRect(NSMinX(body), round(NSMidY(body) - (th - mh) / 2) - mh, textWidth, mh - 4));
+        }
+    } else if ([message length]) {
+        NSDictionary *m = RSText(RSSerif(15), RSInkSoft(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+        CGFloat mh = MIN(NSHeight(body), RSHeightOf(message, m, textWidth - 40));
+        RSDrawText(message, m, NSMakeRect(NSMinX(body) + 20, round(NSMidY(body) - mh / 2), textWidth - 40, mh));
+    }
+    if (glassWidth) {
+        NSRect glass = NSMakeRect(NSMaxX(card) - pad - 100, NSMidY(body) - 50 + 12, 60, 100);
+        RSDrawSandGlass(glass, fraction);
+        NSDictionary *tl = RSText(RSSerifBold(20), recording ? RSRGB(0xb3261e, 1) : RSInk(), NSCenterTextAlignment, NSLineBreakByClipping);
+        RSDrawText(timeLeft, tl, NSMakeRect(NSMinX(glass) - 45, NSMinY(glass) - 30, 150, 26));
+        if (recording) {
+            NSRect lamp = NSMakeRect(NSMinX(glass) + 24, NSMinY(glass) - 46, 12, 12);
+            [NSGraphicsContext saveGraphicsState];
+            RSShadowOn(0, 3, 0.4);
+            [RSRGB(0xd0302a, 1) set];
+            [[NSBezierPath bezierPathWithOvalInRect:lamp] fill];
+            [NSGraphicsContext restoreGraphicsState];
+        }
+    }
+    if (noteRow) {
+        NSRect n = [self sayNoteRectIn:rect];
+        [RSRGB(0x8a7a5c, 0.6) set];
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(n), NSMinY(n) - 2, NSWidth(n), 1), NSCompositeSourceOver);
+    }
+    if ([note length]) {
+        NSDictionary *nt = RSText(RSSerifItalic(12), RSRibbon(), NSCenterTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText(note, nt, NSMakeRect(NSMinX(card) + pad, NSMinY(card) + 12, width, 16));
+    }
+}
+
 @end

@@ -9,6 +9,7 @@
 #import "RSClip.h"
 #import "RSDictionary.h"
 #import "RSClips.h"
+#import "RSSay.h"
 
 static const NSTimeInterval RSRefreshEvery = 60 * 60;
 static const NSTimeInterval RSDayCheckEvery = 5 * 60;
@@ -41,6 +42,8 @@ static NSString *RSTimeText(time_t t)
     RSPlayer *_player;
     RSLines *_lines;
     RSReview *_review;
+    RSSay *_say;
+    RSSayWindow *_sayWindow;
     NSString *_studyFolder;
     NSMutableDictionary *_progress;     // id -> NSNumber, while downloading
     NSMutableDictionary *_problems;     // id -> why the last try failed
@@ -69,6 +72,7 @@ static NSString *RSTimeText(time_t t)
     _downloader = [[RSDownloader alloc] initWithLibrary:_library tools:[RSTools bundled]];
     [_downloader setDelegate:self];
     _lines = [[RSLines alloc] initWithFolder:[[_library folder] stringByAppendingPathComponent:@"Lines"]];
+    _say = [[RSSay alloc] initWithFolder:[[_library folder] stringByAppendingPathComponent:RSSayFolderName]];
     return self;
 }
 
@@ -85,6 +89,9 @@ static NSString *RSTimeText(time_t t)
     [_player release];
     [_review setDelegate:nil];
     [_review release];
+    [_sayWindow setDelegate:nil];
+    [_sayWindow release];
+    [_say release];
     [_lines release];
     [_studyFolder release];
     [_progress release];
@@ -104,6 +111,8 @@ static NSString *RSTimeText(time_t t)
 - (RSLibrary *)library { return _library; }
 - (RSLines *)lines { return _lines; }
 - (RSReview *)review { return _review; }
+- (RSSay *)say { return _say; }
+- (RSSayWindow *)sayWindow { return _sayWindow; }
 
 // ---- Launch -------------------------------------------------------------------
 
@@ -137,6 +146,7 @@ static NSString *RSTimeText(time_t t)
 {
     [_player close];
     [_review close];
+    [_sayWindow close];
     [_downloader cancel];
     [_library save];
     [_lines save];
@@ -386,6 +396,18 @@ static NSString *RSTimeText(time_t t)
         [line setAction:RSDeskClip];
         [lines addObject:line];
     }
+    NSDictionary *said = [_library sayOnDay:RSToday()];
+    NSString *topic = [self todaysTopic];
+    if (topic && [[said objectForKey:@"passes"] unsignedIntegerValue] < 3) {
+        RSDeskLine *line = [[[RSDeskLine alloc] init] autorelease];
+        [line setLabel:@"Say"];
+        NSUInteger passes = [[said objectForKey:@"passes"] unsignedIntegerValue];
+        [line setText:passes ? [NSString stringWithFormat:@"%@ (pass %lu of 3 done)", topic, (unsigned long)passes]
+                              : [NSString stringWithFormat:@"%@, %@", topic, RSSayLengthsText([self sayLengthsSetting])]];
+        [line setKey:@"⌘S"];
+        [line setAction:RSDeskSay];
+        [lines addObject:line];
+    }
     NSString *next = [_library nextIdentifier];
     RSVideo *video = next ? [shelf videoWithIdentifier:next] : nil;
     if (video) {
@@ -495,7 +517,7 @@ static NSString *RSTimeText(time_t t)
         case RSDeskCards: [self showLines]; break;
         case RSDeskWatch: if (![self playVideo:[line identifier]]) NSBeep(); break;
         case RSDeskClip:  if (![self startTodaysClip]) NSBeep(); break;
-        case RSDeskSay:   NSBeep(); break;        // phase 4
+        case RSDeskSay:   [self showSay]; break;
     }
 }
 
@@ -677,6 +699,72 @@ static NSString *RSTimeText(time_t t)
     [self reloadRows];
 }
 
+// ---- Say ---------------------------------------------------------------------------------
+
+- (NSUInteger)sayLengthsSetting
+{
+    NSInteger n = [[NSUserDefaults standardUserDefaults] integerForKey:@"SayLengths"];
+    return n < 0 || n >= (NSInteger)RSSaySettings ? 0 : (NSUInteger)n;
+}
+
+// Today's topic: a story finished today is retold; otherwise the day's island.
+- (NSString *)todaysTopic
+{
+    NSDictionary *said = [_library sayOnDay:RSToday()];
+    if ([[said objectForKey:@"island"] length]) return [said objectForKey:@"island"];
+    RSShelf *shelf = [_library current];
+    for (RSVideo *video in [shelf videos]) {
+        RSWatch *watch = [_library watchFor:[video identifier]];
+        if ([watch finished] && [_library finishedOnDay:RSToday() video:[video identifier]])
+            return [NSString stringWithFormat:@"Перескажи: «%@»", [video displayTitle]];
+    }
+    return [_say islandForDay:RSToday()];
+}
+
+- (RSSayWindow *)showSay
+{
+    if (_sayWindow && [_sayWindow today] != RSToday()) [_sayWindow close];
+    if (_sayWindow == nil) {
+        _sayWindow = [[RSSayWindow alloc] initWithSay:_say topic:[self todaysTopic] setting:[self sayLengthsSetting] today:RSToday()];
+        [_sayWindow setDelegate:self];
+    }
+    [_sayWindow show];
+    return _sayWindow;
+}
+
+- (void)showSay:(id)sender { [self showSay]; }
+
+- (void)showIslands:(id)sender
+{
+    RSSayWindow *w = [self showSay];
+    if ([w state] != RSSayIslands) [w toggleIslands];
+}
+
+- (void)chooseSayLengths:(id)sender
+{
+    [[NSUserDefaults standardUserDefaults] setInteger:[sender tag] forKey:@"SayLengths"];
+    [self reloadRows];
+}
+
+- (void)sayWindow:(RSSayWindow *)window finishedPass:(NSUInteger)pass recorded:(BOOL)recorded
+{
+    NSDictionary *said = [_library sayOnDay:RSToday()];
+    BOOL wasRecorded = [[said objectForKey:@"recorded"] boolValue];
+    [_library recordSayOnDay:RSToday() island:[self todaysTopic] passes:pass recorded:recorded || wasRecorded];
+    [_library save];
+    _watchChanged = YES;
+    [self reloadRows];
+}
+
+- (void)sayWindowClosed:(RSSayWindow *)window
+{
+    if (window != _sayWindow) return;
+    [_sayWindow setDelegate:nil];
+    [_sayWindow autorelease];
+    _sayWindow = nil;
+    [self reloadRows];
+}
+
 // ---- Reports ------------------------------------------------------------------------
 
 - (NSString *)outbox
@@ -696,7 +784,7 @@ static NSString *RSTimeText(time_t t)
     for (NSString *name in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:outbox error:NULL])
         if ([name hasPrefix:prefix]) [[NSFileManager defaultManager] removeItemAtPath:[outbox stringByAppendingPathComponent:name] error:NULL];
     time_t now = RSNowTime();
-    [RSReportText(shelf, _library, _lines, now) writeToFile:[outbox stringByAppendingPathComponent:RSReportName(shelf, now)]
+    [RSReportTextWithNotes(shelf, _library, _lines, [_say tutorNotes], now) writeToFile:[outbox stringByAppendingPathComponent:RSReportName(shelf, now)]
                                          atomically:YES encoding:NSUTF8StringEncoding error:NULL];
 }
 
@@ -801,6 +889,12 @@ static NSString *RSKey(unichar c)
     [shelf addItem:[NSMenuItem separatorItem]];
     RSItem(shelf, @"Cards", @selector(showLines:), @"l", cmd, self);
     RSItem(shelf, @"Today’s Clip", @selector(startTodaysClip:), @"k", cmd, self);
+    RSItem(shelf, @"Say", @selector(showSay:), @"s", cmd, self);
+    RSItem(shelf, @"Islands…", @selector(showIslands:), @"i", cmd, self);
+    NSMenu *lengths = [[[NSMenu alloc] initWithTitle:@"Pass Lengths"] autorelease];
+    for (NSUInteger i = 0; i < RSSaySettings; i++)
+        [RSItem(lengths, RSSayLengthsText(i), @selector(chooseSayLengths:), nil, 0, self) setTag:(NSInteger)i];
+    [[shelf addItemWithTitle:@"Pass Lengths" action:NULL keyEquivalent:@""] setSubmenu:lengths];
 
     // Shown for the keys; the player window takes them itself, before
     // AVPlayerView does.
@@ -849,6 +943,8 @@ static NSString *RSKey(unichar c)
     if (a == @selector(refresh:)) return !_refreshing;
     if (a == @selector(showShelf:) || a == @selector(showLines:)) return YES;
     if (a == @selector(startTodaysClip:)) return [self todaysClip] != nil;
+    if (a == @selector(showSay:) || a == @selector(showIslands:)) return YES;
+    if (a == @selector(chooseSayLengths:)) { [item setState:[item tag] == (NSInteger)[self sayLengthsSetting] ? NSOnState : NSOffState]; return YES; }
     if (a == @selector(loop:)) [item setState:[_player looping] ? NSOnState : NSOffState];
     if (a == @selector(slower:)) [item setState:[_player slower] ? NSOnState : NSOffState];
     if (a == @selector(subtitles:)) [item setState:[_player subtitlesOn] ? NSOnState : NSOffState];

@@ -60,6 +60,11 @@ static NSString *RSOneLine(NSString *text)
 
 NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_t now)
 {
+    return RSReportTextWithNotes(shelf, library, lines, nil, now);
+}
+
+NSString *RSReportTextWithNotes(RSShelf *shelf, RSLibrary *library, RSLines *lines, NSString *tutor, time_t now)
+{
     NSMutableString *s = [NSMutableString stringWithString:@"Russian Shelf report\n"];
     [s appendFormat:@"shelf: %@ (sealed %@)\n", [shelf startText], [shelf sealed]];
     [s appendFormat:@"written: %@\n", RSLocalTime(now, "%Y-%m-%d %H:%M")];
@@ -138,5 +143,14 @@ NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_
     if ([clips length]) [s appendFormat:@"\nClips worked (stretch | passes of 3 | day):\n%@", clips];
     if ([kept length]) [s appendFormat:@"\nKept:\n%@", kept];
     if ([words length]) [s appendFormat:@"\nWords kept (word (lemma) | gloss | the line):\n%@", words];
+    NSMutableString *say = [NSMutableString string];
+    for (NSNumber *day in [library sayDays]) {
+        if ([day longValue] < [shelf start]) continue;
+        NSDictionary *d = [library sayOnDay:[day longValue]];
+        [say appendFormat:@"%@ | %@ | passes %@ | %@\n", RSDayNumberText([day longValue]), [d objectForKey:@"island"],
+         [d objectForKey:@"passes"], [[d objectForKey:@"recorded"] boolValue] ? @"recorded" : @"not recorded"];
+    }
+    if ([say length]) [s appendFormat:@"\nSaid (day | topic | passes of 3 | recorded):\n%@", say];
+    if ([tutor length]) [s appendFormat:@"\nFor the tutor:\n%@%@", tutor, [tutor hasSuffix:@"\n"] ? @"" : @"\n"];
     return s;
 }

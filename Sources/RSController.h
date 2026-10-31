@@ -17,11 +17,13 @@
 #import "RSPlayer.h"
 #import "RSDownloader.h"
 #import "RSReview.h"
+#import "RSSayWindow.h"
 
-@class RSLibrary, RSLines, RSDictionary, RSClipPlan;
+@class RSLibrary, RSLines, RSDictionary, RSClipPlan, RSSay;
 
 @interface RSController : NSObject <NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate,
-                                    RSShelfViewDelegate, RSPlayerDelegate, RSDownloaderDelegate, RSReviewDelegate>
+                                    RSShelfViewDelegate, RSPlayerDelegate, RSDownloaderDelegate, RSReviewDelegate,
+                                    RSSayWindowDelegate>
 
 // nil for both: the real ones (Application Support, ~/Study).
 - (id)initWithLibrary:(RSLibrary *)library studyFolder:(NSString *)studyFolder;
@@ -31,7 +33,9 @@
 @property (nonatomic, readonly) RSPlayer *player;
 @property (nonatomic, readonly) RSLibrary *library;
 @property (nonatomic, readonly) RSLines *lines;          // kept lines, in the library's Lines/
-@property (nonatomic, readonly) RSReview *review;        // the Lines window, while open
+@property (nonatomic, readonly) RSReview *review;        // the Cards window, while open
+@property (nonatomic, readonly) RSSay *say;              // islands, passes, recordings, in the library's Say/
+@property (nonatomic, readonly) RSSayWindow *sayWindow;  // while open
 
 - (void)showWindow;
 - (void)reloadRows;
@@ -40,6 +44,9 @@
 // Today's clip (RSClips.h): chosen once a day, remembered until worked.
 - (RSClipPlan *)todaysClip;
 - (RSPlayer *)startTodaysClip;
+// Say (RSSay.h): today's topic, and the window.
+- (NSString *)todaysTopic;
+- (RSSayWindow *)showSay;
 
 // The dictionary players look words up in: the bundle's, unless one is set
 // (the screenshots use the test fixture's).

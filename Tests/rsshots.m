@@ -21,6 +21,8 @@
 #import "RSDate.h"
 #import "RSClip.h"
 #import "RSDictionary.h"
+#import "RSSay.h"
+#import "RSSayWindow.h"
 
 static const char *KeyPrivate =
     "-----BEGIN EC PRIVATE KEY-----\n"
@@ -370,6 +372,31 @@ int main(int argc, const char *argv[])
         [wordReview close];
         [c reloadRows];
         ShootBoth([c window], out, @"shelf-after-lines");
+
+        // Say: the topic, a pass running, between passes, done; the islands.
+        RSSayWindow *say2 = [c showSay];
+        [say2 setSilentForTesting];
+        [[say2 window] orderOut:nil];
+        printf("  say      topic state %d\n", (int)[say2 state]);
+        ShootBoth([say2 window], out, @"say");
+        [say2 space];
+        [say2 setSecondsLeftForTesting:71];
+        ShootBoth([say2 window], out, @"say-running");
+        [say2 setSecondsLeftForTesting:0];
+        printf("  say      after pass 1: state %d, %s\n", (int)[say2 state], [[say2 visibleNote] UTF8String]);
+        ShootBoth([say2 window], out, @"say-between");
+        [say2 space];
+        [say2 setSecondsLeftForTesting:0];
+        [say2 space];
+        [say2 setSecondsLeftForTesting:0];
+        printf("  say      done: state %d\n", (int)[say2 state]);
+        ShootBoth([say2 window], out, @"say-done");
+        [say2 toggleIslands];
+        ShootBoth([say2 window], out, @"say-islands");
+        [say2 toggleIslands];
+        [say2 close];
+        [c reloadRows];
+        ShootBoth([c window], out, @"shelf-after-say");
 
         // No shelf at all, and one turned away.
         NSString *emptyFolder = [out stringByAppendingPathComponent:@"empty-library"];
