@@ -537,6 +537,21 @@ static void TestLibrary(void)
     [library recordPosition:100 furthest:100 duration:400 for:Id(3)];
     CHECK([[library nextIdentifier] isEqualToString:Id(2)], "the next unwatched");
     [library save];
+    // Saved again with nothing new: the file is left alone (an atomic write
+    // would put a new file in its place). Something new is written.
+    NSString *statePath = [folder stringByAppendingPathComponent:@"State.plist"];
+    struct stat st1, st2, st3;
+    stat([statePath fileSystemRepresentation], &st1);
+    CHECK([library save] && stat([statePath fileSystemRepresentation], &st2) == 0 && st2.st_ino == st1.st_ino,
+          "saving what hasn't changed doesn't write State.plist");
+    [library recordPosition:90 furthest:100 duration:400 for:Id(3)];
+    NSDictionary *saved = [[[NSDictionary dictionaryWithContentsOfFile:statePath] objectForKey:@"watched"] objectForKey:Id(3)];
+    CHECK([library save] && stat([statePath fileSystemRepresentation], &st3) == 0 && st3.st_ino != st1.st_ino &&
+          [[saved objectForKey:@"position"] doubleValue] == 100 &&
+          [[[[[NSDictionary dictionaryWithContentsOfFile:statePath] objectForKey:@"watched"] objectForKey:Id(3)] objectForKey:@"position"]
+           doubleValue] == 90, "a change is written");
+    CHECK(!RSWritePlist([NSArray arrayWithObject:[NSNull null]], Temp(@"not-a-plist.plist")) &&
+          ![[NSFileManager defaultManager] fileExistsAtPath:Temp(@"not-a-plist.plist")], "not a property list: NO, and nothing written");
 
     // Nothing changes before the 19th.
     RSShelf *replaced = nil;
@@ -851,6 +866,11 @@ static void TestLines(void)
 
     // Saved and read back, the same.
     CHECK([lines save], "saved");
+    struct stat ls1, ls2;
+    NSString *linesPath = [folder stringByAppendingPathComponent:@"Lines.plist"];
+    stat([linesPath fileSystemRepresentation], &ls1);
+    CHECK([lines save] && stat([linesPath fileSystemRepresentation], &ls2) == 0 && ls2.st_ino == ls1.st_ino,
+          "saved again with nothing new: Lines.plist left alone");
     RSLines *read = [[[RSLines alloc] initWithFolder:folder] autorelease];
     CHECK([[read lines] count] == RSKeepPerDay + 1, "read back: %lu", (unsigned long)[[read lines] count]);
     RSKeptLine *a2 = [[read lines] objectAtIndex:0], *c2 = [[read lines] objectAtIndex:1];

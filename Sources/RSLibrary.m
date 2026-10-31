@@ -9,6 +9,15 @@ static NSString *const RSCurrentFile = @"Shelf.signed";
 static NSString *const RSPendingFile = @"Next Shelf.signed";
 static NSString *const RSStateFile = @"State.plist";
 
+BOOL RSWritePlist(id plist, NSString *path)
+{
+    NSData *data = plist ? [NSPropertyListSerialization dataWithPropertyList:plist format:NSPropertyListXMLFormat_v1_0
+                                                                     options:0 error:NULL] : nil;
+    if (data == nil) return NO;
+    if ([data isEqualToData:[NSData dataWithContentsOfFile:path]]) return YES;
+    return [data writeToFile:path atomically:YES];
+}
+
 @implementation RSWatch
 @end
 
@@ -98,7 +107,7 @@ static NSString *const RSStateFile = @"State.plist";
     if ([_clips count]) [state setObject:_clips forKey:@"clips"];
     if ([_say count]) [state setObject:_say forKey:@"say"];
     if (_notice) [state setObject:_notice forKey:@"notice"];
-    return [state writeToFile:[_folder stringByAppendingPathComponent:RSStateFile] atomically:YES];
+    return RSWritePlist(state, [_folder stringByAppendingPathComponent:RSStateFile]);
 }
 
 - (void)reload

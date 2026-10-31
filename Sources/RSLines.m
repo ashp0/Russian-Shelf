@@ -1,4 +1,5 @@
 #import "RSLines.h"
+#import "RSLibrary.h"
 #import "RSSyncManager.h"
 #include <math.h>
 
@@ -139,7 +140,7 @@ long RSLineGap(NSUInteger step)
     for (RSKeptLine *line in _lines) [lines addObject:[line plist]];
     NSDictionary *state = [NSDictionary dictionaryWithObjectsAndKeys:lines, @"lines",
         [NSNumber numberWithLong:_heardDay], @"heardDay", [NSNumber numberWithUnsignedInteger:_heardCount], @"heardCount", nil];
-    return [state writeToFile:[_folder stringByAppendingPathComponent:RSLinesFile] atomically:YES];
+    return RSWritePlist(state, [_folder stringByAppendingPathComponent:RSLinesFile]);
 }
 
 // "JE4cI_Knzvc-0000250120": the video and the start in milliseconds, so a

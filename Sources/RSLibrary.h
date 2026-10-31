@@ -67,6 +67,12 @@ NSString *RSHelpName(RSHelp kind);          // "shown", "heard again", "looped",
 extern NSString *const RSFeltTooEasy, *const RSFeltAboutRight, *const RSFeltTooHard;
 extern NSString *const RSWantMore, *const RSWantLess;
 
+// A property list written (XML, atomically) only when it isn't what the file
+// already holds: saving what hasn't changed leaves the file and its date
+// alone, so the disk stays idle and the sync sees nothing new. NO if it
+// isn't a property list or couldn't be written.
+BOOL RSWritePlist(id plist, NSString *path);
+
 @interface RSLibrary : NSObject
 
 + (NSString *)defaultFolder;
