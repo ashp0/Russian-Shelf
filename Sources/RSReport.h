@@ -49,3 +49,5 @@ NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_
 NSString *RSComputerName(void);
 // "4:10", "1:02:03".
 NSString *RSClock(double seconds);
+// "2026-11-03", from a day number (RSDate.h).
+NSString *RSDayNumberText(long day);

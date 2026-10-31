@@ -69,7 +69,7 @@ FRAMEWORKS := -framework Cocoa -framework AVKit -framework AVFoundation -framewo
 
 MODEL_SRC := Sources/RSDate.c Sources/RSKeys.c Sources/RSCrypto.m Sources/RSShelf.m Sources/RSSubtitles.m \
              Sources/RSProcess.m Sources/RSSync.m Sources/RSLibrary.m Sources/RSDownloader.m Sources/RSReport.m \
-             Sources/RSLines.m Sources/RSClip.m Sources/RSDictionary.m
+             Sources/RSLines.m Sources/RSClip.m Sources/RSDictionary.m Sources/RSClips.m Sources/RSSay.m
 VIEW_SRC  := Sources/RSStyle.m Sources/RSShelfView.m Sources/RSPlayer.m Sources/RSReview.m Sources/RSController.m \
              Sources/RSSelfTest.m
 APP_SRC   := $(MODEL_SRC) $(VIEW_SRC) Sources/main.m

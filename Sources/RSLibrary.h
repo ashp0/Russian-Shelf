@@ -120,6 +120,20 @@ extern NSString *const RSWantMore, *const RSWantLess;
 // The first video on this week's shelf not finished yet, or nil.
 - (NSString *)nextIdentifier;
 
+// ---- Clips (RSClips.h) ----
+// The clips worked on a video, each {start, end, passes, day} (NSNumbers), in
+// the order worked; and today's, whatever video it's of (nil if none).
+- (NSArray *)clipsFor:(NSString *)identifier;
+- (NSDictionary *)clipOnDay:(long)day;             // adds "video"
+// Notes a clip's progress: the same start on the same day is the same clip.
+- (void)recordClip:(NSString *)identifier start:(double)start end:(double)end passes:(NSUInteger)passes day:(long)day;
+
+// ---- Say (RSSay.h) ----
+// What was said on a day: {island, passes, recorded} (NSString, NSNumbers); nil for none.
+- (NSDictionary *)sayOnDay:(long)day;
+- (void)recordSayOnDay:(long)day island:(NSString *)island passes:(NSUInteger)passes recorded:(BOOL)recorded;
+- (NSArray *)sayDays;                                 // the days with an entry, ascending (NSNumber)
+
 - (BOOL)save;
 
 @end

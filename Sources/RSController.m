@@ -8,6 +8,7 @@
 #import "RSLines.h"
 #import "RSClip.h"
 #import "RSDictionary.h"
+#import "RSClips.h"
 
 static const NSTimeInterval RSRefreshEvery = 60 * 60;
 static const NSTimeInterval RSDayCheckEvery = 5 * 60;
@@ -371,6 +372,20 @@ static NSString *RSTimeText(time_t t)
         [cards setAction:RSDeskCards];
         [lines addObject:cards];
     }
+    RSClipPlan *clip = [self todaysClip];
+    NSDictionary *today = [_library clipOnDay:RSToday()];
+    NSUInteger passes = [[today objectForKey:@"passes"] unsignedIntegerValue];
+    if (clip && passes < 3) {
+        RSDeskLine *line = [[[RSDeskLine alloc] init] autorelease];
+        [line setLabel:@"Clip"];
+        NSString *title = [[shelf videoWithIdentifier:[clip video]] displayTitle] ?: @"";
+        [line setText:passes ? [NSString stringWithFormat:@"%@, %@ (pass %lu of 3 done)", title, RSClipSpan([clip start], [clip end]), (unsigned long)passes]
+                              : [NSString stringWithFormat:@"%@, %@", title, RSClipSpan([clip start], [clip end])]];
+        [line setKey:@"⌘K"];
+        [line setIdentifier:[clip video]];
+        [line setAction:RSDeskClip];
+        [lines addObject:line];
+    }
     NSString *next = [_library nextIdentifier];
     RSVideo *video = next ? [shelf videoWithIdentifier:next] : nil;
     if (video) {
@@ -479,8 +494,8 @@ static NSString *RSTimeText(time_t t)
     switch ([line action]) {
         case RSDeskCards: [self showLines]; break;
         case RSDeskWatch: if (![self playVideo:[line identifier]]) NSBeep(); break;
-        case RSDeskClip:
-        case RSDeskSay:   NSBeep(); break;        // later phases
+        case RSDeskClip:  if (![self startTodaysClip]) NSBeep(); break;
+        case RSDeskSay:   NSBeep(); break;        // phase 4
     }
 }
 
@@ -601,6 +616,65 @@ static NSString *RSTimeText(time_t t)
     }
     [self reloadRows];
     [_window makeKeyAndOrderFront:nil];
+}
+
+// ---- Today's clip --------------------------------------------------------------------
+
+// Today's clip: the one begun today, else a new one from the week's fast video
+// (or the natural one, or any) that is downloaded and has subtitles.
+- (RSClipPlan *)todaysClip
+{
+    RSShelf *shelf = [_library current];
+    if (shelf == nil) return nil;
+    NSDictionary *today = [_library clipOnDay:RSToday()];
+    if (today) {
+        RSClipPlan *plan = [[[RSClipPlan alloc] init] autorelease];
+        [plan setVideo:[today objectForKey:@"video"]];
+        [plan setStart:[[today objectForKey:@"start"] doubleValue]];
+        [plan setEnd:[[today objectForKey:@"end"] doubleValue]];
+        return plan;
+    }
+    NSMutableArray *candidates = [NSMutableArray array];
+    for (NSString *kind in [NSArray arrayWithObjects:RSKindFast, RSKindNatural, RSKindEasy, nil])
+        [candidates addObjectsFromArray:[shelf videosOfKind:kind]];
+    [candidates addObjectsFromArray:[shelf videosOfKind:nil]];
+    for (RSVideo *video in candidates) {
+        NSString *identifier = [video identifier];
+        if (![_library isDownloaded:identifier]) continue;
+        RSSubtitles *subtitles = [RSSubtitles subtitlesWithFile:[_library subtitlesPath:identifier]];
+        if ([[subtitles lines] count] == 0) continue;
+        RSClipPlan *plan = RSChooseClip(identifier, subtitles, [_library helpedLinesFor:identifier], [_library clipsFor:identifier]);
+        if (plan) return plan;
+    }
+    return nil;
+}
+
+- (RSPlayer *)startTodaysClip
+{
+    RSClipPlan *plan = [self todaysClip];
+    if (plan == nil) return nil;
+    RSPlayer *player = [self playVideo:[plan video]];
+    if (player == nil) return nil;
+    if (![_library clipOnDay:RSToday()]) {
+        [_library recordClip:[plan video] start:[plan start] end:[plan end] passes:0 day:RSToday()];
+        [_library save];
+    }
+    [player startClipFrom:[plan start] to:[plan end]];
+    [self reloadRows];
+    return player;
+}
+
+- (void)startTodaysClip:(id)sender
+{
+    if (![self startTodaysClip]) NSBeep();
+}
+
+- (void)player:(RSPlayer *)player clipFrom:(double)start to:(double)end passes:(NSUInteger)passes
+{
+    [_library recordClip:[player identifier] start:start end:end passes:passes day:RSToday()];
+    [_library save];
+    _watchChanged = YES;
+    [self reloadRows];
 }
 
 // ---- Reports ------------------------------------------------------------------------
@@ -726,6 +800,7 @@ static NSString *RSKey(unichar c)
     RSItem(shelf, @"Look for a New Shelf", @selector(refresh:), @"r", cmd, self);
     [shelf addItem:[NSMenuItem separatorItem]];
     RSItem(shelf, @"Cards", @selector(showLines:), @"l", cmd, self);
+    RSItem(shelf, @"Today’s Clip", @selector(startTodaysClip:), @"k", cmd, self);
 
     // Shown for the keys; the player window takes them itself, before
     // AVPlayerView does.
@@ -773,6 +848,7 @@ static NSString *RSKey(unichar c)
     SEL a = [item action];
     if (a == @selector(refresh:)) return !_refreshing;
     if (a == @selector(showShelf:) || a == @selector(showLines:)) return YES;
+    if (a == @selector(startTodaysClip:)) return [self todaysClip] != nil;
     if (a == @selector(loop:)) [item setState:[_player looping] ? NSOnState : NSOffState];
     if (a == @selector(slower:)) [item setState:[_player slower] ? NSOnState : NSOffState];
     if (a == @selector(subtitles:)) [item setState:[_player subtitlesOn] ? NSOnState : NSOffState];

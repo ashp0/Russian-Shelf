@@ -44,7 +44,18 @@
 // dictionary; kept with the word alone). Returns what to say.
 - (NSString *)player:(RSPlayer *)player keepWord:(NSString *)word entry:(RSDictionaryEntry *)entry
                 line:(RSLine *)line before:(RSLine *)before;
+// The clip moved on: `passes` of three are finished (3: done for today).
+- (void)player:(RSPlayer *)player clipFrom:(double)start to:(double)end passes:(NSUInteger)passes;
 @end
+
+// The clip's passes (RSClips.h): off, then listen, read, say along, done.
+typedef enum {
+    RSClipOff = 0,
+    RSClipListen,
+    RSClipRead,
+    RSClipSay,
+    RSClipDone
+} RSClipPass;
 
 @interface RSPlayer : NSObject <NSWindowDelegate>
 
@@ -87,6 +98,22 @@
 - (void)toggleWordSlip;
 - (void)chooseSlipWord:(NSInteger)index;
 - (void)keepSlipWord;
+
+// Today's clip (C, or the desk card): the stretch from `start` to `end`,
+// worked in three passes behind a ruled card at the top of the picture.
+//   1 Listen: no text, the stretch twice.
+//   2 Read: captions on, a line at a time, pausing after each; Space goes on,
+//     W looks a word up, K keeps.
+//   3 Say along: each line once to hear, then again to speak over it; R
+//     records your say-along through the microphone and plays it back after
+//     the speaker's.
+// Space pauses and goes on; C or Esc leaves the clip; ← → leave it too.
+- (void)startClipFrom:(double)start to:(double)end;
+- (void)leaveClip;
+@property (nonatomic, readonly) RSClipPass clipPass;
+@property (nonatomic, readonly) BOOL recordingSayAlong;
+- (void)toggleRecordSayAlong;
+- (void)setClipPassForTesting:(RSClipPass)pass;
 
 // How the video felt, as chosen before (the controller sets it on opening).
 - (void)setFelt:(NSString *)felt want:(NSString *)want;

@@ -18,7 +18,7 @@
 #import "RSDownloader.h"
 #import "RSReview.h"
 
-@class RSLibrary, RSLines, RSDictionary;
+@class RSLibrary, RSLines, RSDictionary, RSClipPlan;
 
 @interface RSController : NSObject <NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate,
                                     RSShelfViewDelegate, RSPlayerDelegate, RSDownloaderDelegate, RSReviewDelegate>
@@ -37,6 +37,9 @@
 - (void)reloadRows;
 - (RSPlayer *)playVideo:(NSString *)identifier;
 - (RSReview *)showLines;
+// Today's clip (RSClips.h): chosen once a day, remembered until worked.
+- (RSClipPlan *)todaysClip;
+- (RSPlayer *)startTodaysClip;
 
 // The dictionary players look words up in: the bundle's, unless one is set
 // (the screenshots use the test fixture's).

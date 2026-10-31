@@ -12,6 +12,8 @@ static NSString *const RSStateFile = @"State.plist";
 @end
 
 @interface RSLibrary () {
+    NSMutableDictionary *_clips;        // id -> clips worked (RSClips.h)
+    NSMutableDictionary *_say;          // "day" -> {island, passes, recorded} (RSSay.h)
     NSData *_aesKey, *_publicKey;
     NSMutableDictionary *_watched;      // id -> {position, furthest, duration, finished}
 }
@@ -52,6 +54,17 @@ static NSString *const RSStateFile = @"State.plist";
             if ([[watched objectForKey:identifier] isKindOfClass:[NSDictionary class]])
                 [_watched setObject:[[[watched objectForKey:identifier] mutableCopy] autorelease] forKey:identifier];
     if ([[state objectForKey:@"notice"] isKindOfClass:[NSString class]]) _notice = [[state objectForKey:@"notice"] copy];
+    _say = [[NSMutableDictionary alloc] init];
+    NSDictionary *say = [state objectForKey:@"say"];
+    if ([say isKindOfClass:[NSDictionary class]])
+        for (NSString *day in say)
+            if ([[say objectForKey:day] isKindOfClass:[NSDictionary class]]) [_say setObject:[say objectForKey:day] forKey:day];
+    _clips = [[NSMutableDictionary alloc] init];
+    NSDictionary *clips = [state objectForKey:@"clips"];
+    if ([clips isKindOfClass:[NSDictionary class]])
+        for (NSString *identifier in clips)
+            if ([[clips objectForKey:identifier] isKindOfClass:[NSArray class]])
+                [_clips setObject:[[[clips objectForKey:identifier] mutableCopy] autorelease] forKey:identifier];
 
     // Shelves are checked again every time: a file here is no more trusted
     // than one in the study folder.
@@ -69,6 +82,8 @@ static NSString *const RSStateFile = @"State.plist";
     [_aesKey release];
     [_publicKey release];
     [_watched release];
+    [_clips release];
+    [_say release];
     [_current release];
     [_pending release];
     [_notice release];
@@ -79,6 +94,8 @@ static NSString *const RSStateFile = @"State.plist";
 {
     NSMutableDictionary *state = [NSMutableDictionary dictionary];
     [state setObject:_watched forKey:@"watched"];
+    if ([_clips count]) [state setObject:_clips forKey:@"clips"];
+    if ([_say count]) [state setObject:_say forKey:@"say"];
     if (_notice) [state setObject:_notice forKey:@"notice"];
     return [state writeToFile:[_folder stringByAppendingPathComponent:RSStateFile] atomically:YES];
 }
@@ -428,6 +445,72 @@ static NSString *RSOneOf(id value, NSArray *allowed)
 - (NSUInteger)help:(RSHelp)kind for:(NSString *)identifier
 {
     return [[[_watched objectForKey:identifier] objectForKey:RSHelpKey(kind)] unsignedIntegerValue];
+}
+
+// ---- Clips ------------------------------------------------------------------
+
+- (NSArray *)clipsFor:(NSString *)identifier
+{
+    NSMutableArray *found = [NSMutableArray array];
+    for (id c in [_clips objectForKey:identifier] ?: [NSArray array])
+        if ([c isKindOfClass:[NSDictionary class]]) [found addObject:c];
+    return found;
+}
+
+- (NSDictionary *)clipOnDay:(long)day
+{
+    for (NSString *identifier in _clips)
+        for (NSDictionary *c in [self clipsFor:identifier])
+            if ([[c objectForKey:@"day"] longValue] == day) {
+                NSMutableDictionary *d = [NSMutableDictionary dictionaryWithDictionary:c];
+                [d setObject:identifier forKey:@"video"];
+                return d;
+            }
+    return nil;
+}
+
+- (void)recordClip:(NSString *)identifier start:(double)start end:(double)end passes:(NSUInteger)passes day:(long)day
+{
+    if ([identifier length] == 0) return;
+    NSMutableArray *clips = [_clips objectForKey:identifier];
+    if (clips == nil) {
+        clips = [NSMutableArray array];
+        [_clips setObject:clips forKey:identifier];
+    }
+    NSDictionary *entry = [NSDictionary dictionaryWithObjectsAndKeys:
+        [NSNumber numberWithDouble:start], @"start", [NSNumber numberWithDouble:end], @"end",
+        [NSNumber numberWithUnsignedInteger:passes], @"passes", [NSNumber numberWithLong:day], @"day", nil];
+    for (NSUInteger i = 0; i < [clips count]; i++) {
+        NSDictionary *c = [clips objectAtIndex:i];
+        if ([c isKindOfClass:[NSDictionary class]] && [[c objectForKey:@"day"] longValue] == day &&
+            fabs([[c objectForKey:@"start"] doubleValue] - start) < 0.01) {
+            if (passes >= [[c objectForKey:@"passes"] unsignedIntegerValue]) [clips replaceObjectAtIndex:i withObject:entry];
+            return;
+        }
+    }
+    [clips addObject:entry];
+}
+
+// ---- Say ----------------------------------------------------------------------
+
+- (NSDictionary *)sayOnDay:(long)day
+{
+    return [_say objectForKey:[NSString stringWithFormat:@"%ld", day]];
+}
+
+- (void)recordSayOnDay:(long)day island:(NSString *)island passes:(NSUInteger)passes recorded:(BOOL)recorded
+{
+    [_say setObject:[NSDictionary dictionaryWithObjectsAndKeys:island ?: @"", @"island",
+                     [NSNumber numberWithUnsignedInteger:passes], @"passes", [NSNumber numberWithBool:recorded], @"recorded", nil]
+             forKey:[NSString stringWithFormat:@"%ld", day]];
+}
+
+- (NSArray *)sayDays
+{
+    NSMutableArray *days = [NSMutableArray array];
+    for (NSString *key in _say) [days addObject:[NSNumber numberWithLong:atol([key UTF8String])]];
+    [days sortUsingSelector:@selector(compare:)];
+    return days;
 }
 
 - (NSString *)nextIdentifier

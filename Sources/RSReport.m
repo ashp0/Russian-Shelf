@@ -2,6 +2,8 @@
 #import "RSLibrary.h"
 #import "RSShelf.h"
 #import "RSLines.h"
+#import "RSClips.h"
+#import "RSDate.h"
 #include <unistd.h>
 #include <CoreServices/CoreServices.h>
 
@@ -42,6 +44,14 @@ NSString *RSComputerName(void)
 }
 
 const NSUInteger RSReportLinesPerVideo = 40;
+
+// "2026-11-03", from a day number.
+NSString *RSDayNumberText(long day)
+{
+    int y, m, d;
+    RSCivilFromDays(day, &y, &m, &d);
+    return [NSString stringWithFormat:@"%04d-%02d-%02d", y, m, d];
+}
 
 static NSString *RSOneLine(NSString *text)
 {
@@ -119,6 +129,13 @@ NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_
         [s appendFormat:@"\nHelp (shown, heard again, looped, slowed, transcript, subtitles, looked up, kept):\n%@", help];
     if ([felt length]) [s appendFormat:@"\nHow it felt (the owner's own choice, about the video):\n%@", felt];
     if ([asked length]) [s appendFormat:@"\nLines help was asked on:\n%@", asked];
+    NSMutableString *clips = [NSMutableString string];
+    for (RSVideo *video in [shelf videos])
+        for (NSDictionary *c in [library clipsFor:[video identifier]])
+            [clips appendFormat:@"%@ | %@ | passes %@ | day %@\n", [video identifier],
+             RSClipSpan([[c objectForKey:@"start"] doubleValue], [[c objectForKey:@"end"] doubleValue]), [c objectForKey:@"passes"],
+             RSDayNumberText([[c objectForKey:@"day"] longValue])];
+    if ([clips length]) [s appendFormat:@"\nClips worked (stretch | passes of 3 | day):\n%@", clips];
     if ([kept length]) [s appendFormat:@"\nKept:\n%@", kept];
     if ([words length]) [s appendFormat:@"\nWords kept (word (lemma) | gloss | the line):\n%@", words];
     return s;

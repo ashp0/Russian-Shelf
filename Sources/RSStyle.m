@@ -1043,6 +1043,58 @@ static NSArray *RSSlipLayout(CGFloat width, NSArray *words, CGFloat *height)
     RSDrawText(hint, ht, NSMakeRect(NSMaxX(r2) - 220, NSMinY(r2) + 1, 220, 16));
 }
 
+// ---- Today's clip ----------------------------------------------------------------
+
++ (NSSize)clipCardSizeIn:(NSRect)videoRect
+{
+    return NSMakeSize(MIN(560, NSWidth(videoRect) - 40), 96);
+}
+
++ (void)drawClipCardIn:(NSRect)card span:(NSString *)span pass:(NSInteger)pass instruction:(NSString *)instruction
+                  keys:(NSString *)keys recording:(BOOL)recording
+{
+    RSDrawCard(card, 0, YES);
+    BOOL flipped = RSFlipped();
+    CGFloat pad = 12, x = NSMinX(card) + pad, width = NSWidth(card) - 2 * pad;
+    NSRect (^row)(CGFloat, CGFloat) = ^NSRect(CGFloat fromTop, CGFloat h) {
+        return NSMakeRect(x, flipped ? NSMinY(card) + fromTop : NSMaxY(card) - fromTop - h, width, h);
+    };
+    // The heading: "Clip · 2:10–4:40", with the three passes to its right.
+    NSDictionary *h = RSText(RSSerifBold(14), RSInk(), NSLeftTextAlignment, NSLineBreakByClipping);
+    RSDrawText([NSString stringWithFormat:@"Clip · %@", span ?: @""], h, row(9, 20));
+    static NSString *const names[] = { @"1 Listen", @"2 Read", @"3 Say along" };
+    CGFloat px = NSMaxX(card) - pad;
+    for (int i = 2; i >= 0; i--) {
+        BOOL now = pass == i + 1, done = pass > i + 1;
+        NSDictionary *a = RSText(now ? RSSerifBold(12) : RSSerif(12), now ? RSRGB(0x1f3f8a, 1) : done ? RSStampInk() : RSInkFaint(),
+                                 NSRightTextAlignment, NSLineBreakByClipping);
+        NSString *name = done ? [@"✓ " stringByAppendingString:names[i]] : names[i];
+        CGFloat w = ceil([name sizeWithAttributes:a].width) + 4;
+        px -= w;
+        RSDrawText(name, a, NSMakeRect(px, NSMinY(row(11, 18)), w, 18));
+        px -= 14;
+    }
+    [RSRGB(0xe08a8a, 0.85) set];
+    NSRect rule = row(33, 1);
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(card) + 1, NSMinY(rule), NSWidth(card) - 2, 1), NSCompositeSourceOver);
+    // What to do now, large; the keys under it.
+    NSDictionary *it = RSText(RSSerif(16), RSInk(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+    RSDrawText(instruction ?: @"", it, row(40, 24));
+    NSDictionary *kt = RSText(RSSerifItalic(11.5), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+    RSDrawText(keys ?: @"", kt, row(68, 18));
+    if (recording) {
+        // A small red lamp: the microphone is on.
+        NSRect lamp = NSMakeRect(NSMaxX(card) - pad - 10, NSMinY(row(70, 10)), 10, 10);
+        [NSGraphicsContext saveGraphicsState];
+        RSShadowOn(0, 3, 0.4);
+        [RSRGB(0xd0302a, 1) set];
+        [[NSBezierPath bezierPathWithOvalInRect:lamp] fill];
+        [NSGraphicsContext restoreGraphicsState];
+        NSDictionary *rt = RSText(RSSerifItalic(11), RSRGB(0xb3261e, 1), NSRightTextAlignment, NSLineBreakByClipping);
+        RSDrawText(@"recording", rt, NSMakeRect(NSMinX(lamp) - 70, NSMinY(lamp) - 3, 66, 16));
+    }
+}
+
 // ---- The transcript ---------------------------------------------------------
 //
 // A sheet of ruled exercise paper: a blue rule under each line, the time in

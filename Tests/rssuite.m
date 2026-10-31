@@ -25,6 +25,7 @@
 #import "RSLines.h"
 #import "RSClip.h"
 #import "RSDictionary.h"
+#import "RSClips.h"
 
 static int failures = 0, checks = 0;
 
@@ -704,7 +705,10 @@ static void TestReports(void)
     [lines keepText:@"Elsewhere." before:nil video:@"notonshelf1" title:@"Other" start:5 end:6 today:100 problem:NULL];
     [lines keepWord:@"отрезала" lemma:@"отре\u0301зать" gloss:@"cut off" rank:4100 inLine:@"Она отрезала\nволосы." before:nil video:Id(2)
              title:@"Story" start:250.4 end:252 today:100 problem:NULL];
+    [library recordClip:Id(2) start:130 end:280 passes:3 day:RSDaysFromCivil(2026, 10, 14)];
     text = RSReportText([library current], library, lines, when);
+    CHECK(Has(text, [NSString stringWithFormat:@"\nClips worked (stretch | passes of 3 | day):\n%@ | 2:10–4:40 | passes 3 | day 2026-10-14\n", Id(2)]),
+          "clips section:\n%s", [text UTF8String]);
     CHECK(Has(text, [NSString stringWithFormat:@"\nWords kept (word (lemma) | gloss | the line):\n%@ | 4:10 | отрезала (отре\u0301зать) | cut off | in: Она отрезала / волосы.\n", Id(2)]),
           "words kept section:\n%s", [text UTF8String]);
     CHECK(!Has(text, @"| отрезала (отре\u0301зать) | cut off | means:"), "a word card isn't listed among the lines");
@@ -969,6 +973,62 @@ static void TestDictionary(NSString *fixtures)
     CHECK([RSStressMarked(@"челове'к") isEqualToString:@"челове\u0301к"], "the stress mark");
 }
 
+// ---- Today's clip ---------------------------------------------------------------
+
+static void TestClips(NSString *fixtures)
+{
+    RSSubtitles *subs = [RSSubtitles subtitlesWithFile:[fixtures stringByAppendingPathComponent:@"JE4cI_Knzvc.ru.vtt"]];
+    NSArray *lines = [subs lines];
+    CHECK([lines count] > 5, "the fixture has lines");
+    RSLine *firstLine = [lines objectAtIndex:0], *lastLine = [lines lastObject];
+    // Nothing asked, nothing worked: from the first line, as far as the span allows.
+    RSClipPlan *p = RSChooseClip(@"JE4cI_Knzvc", subs, [NSArray array], [NSArray array]);
+    CHECK(p && [[p video] isEqualToString:@"JE4cI_Knzvc"] && fabs([p start] - [firstLine start]) < 0.01 && [p firstLine] == 0,
+          "a first clip starts at the first line");
+    CHECK([p end] - [p start] <= RSClipLongest + 0.01 || [p lastLine] == [lines count] - 1, "and runs to the span's end or the last line");
+    CHECK(fabs([p end] - [(RSLine *)[lines objectAtIndex:[p lastLine]] end]) < 0.01, "it ends on a line's end");
+    // The line asked about most comes first.
+    RSLine *asked = [lines objectAtIndex:4];
+    NSArray *helped = [NSArray arrayWithObjects:
+        [NSDictionary dictionaryWithObjectsAndKeys:[asked text], @"text", [NSNumber numberWithDouble:[asked start]], @"start",
+         [NSNumber numberWithInt:3], @"shown", [NSNumber numberWithInt:1], @"looped", nil],
+        [NSDictionary dictionaryWithObjectsAndKeys:[firstLine text], @"text", [NSNumber numberWithDouble:[firstLine start]], @"start",
+         [NSNumber numberWithInt:1], @"shown", nil], nil];
+    p = RSChooseClip(@"JE4cI_Knzvc", subs, helped, [NSArray array]);
+    CHECK(p && [p firstLine] == 4, "it starts at the line most asked about (%lu)", (unsigned long)[p firstLine]);
+    // Once worked, that stretch is skipped: the next clip starts after it.
+    NSArray *worked = [NSArray arrayWithObject:[NSDictionary dictionaryWithObjectsAndKeys:
+        [NSNumber numberWithDouble:[asked start]], @"start", [NSNumber numberWithDouble:[asked end] + 0.5], @"end", nil]];
+    p = RSChooseClip(@"JE4cI_Knzvc", subs, helped, worked);
+    CHECK(p && [p firstLine] == 0, "the asked line worked already: the other asked line");
+    worked = [NSArray arrayWithObject:[NSDictionary dictionaryWithObjectsAndKeys:
+        [NSNumber numberWithDouble:0], @"start", [NSNumber numberWithDouble:[(RSLine *)[lines objectAtIndex:5] end]], @"end", nil]];
+    p = RSChooseClip(@"JE4cI_Knzvc", subs, helped, worked);
+    CHECK(p && [p firstLine] == 6, "all asked lines worked: the first line after the last clip (%lu)", (unsigned long)[p firstLine]);
+    worked = [NSArray arrayWithObject:[NSDictionary dictionaryWithObjectsAndKeys:
+        [NSNumber numberWithDouble:0], @"start", [NSNumber numberWithDouble:[lastLine end] + 1], @"end", nil]];
+    CHECK(RSChooseClip(@"JE4cI_Knzvc", subs, helped, worked) == nil, "everything worked: nothing left");
+    CHECK(RSChooseClip(@"x", [RSSubtitles subtitlesWithVTT:@"WEBVTT\n"], nil, nil) == nil, "no lines, no clip");
+    CHECK([RSClipSpan(130, 280) isEqualToString:@"2:10–4:40"], "the span: %s", [RSClipSpan(130, 280) UTF8String]);
+
+    // The library remembers clips, and today's.
+    NSString *folder = Temp(@"clips-library");
+    [[NSFileManager defaultManager] removeItemAtPath:folder error:NULL];
+    RSLibrary *lib = [[[RSLibrary alloc] initWithFolder:folder aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    [lib recordClip:@"JE4cI_Knzvc" start:130 end:280 passes:0 day:100];
+    [lib recordClip:@"JE4cI_Knzvc" start:130 end:280 passes:2 day:100];
+    [lib recordClip:@"JE4cI_Knzvc" start:130 end:280 passes:1 day:100];       // never backwards
+    [lib recordClip:@"JE4cI_Knzvc" start:300 end:420 passes:3 day:101];
+    CHECK([[lib clipsFor:@"JE4cI_Knzvc"] count] == 2 && [[[[lib clipsFor:@"JE4cI_Knzvc"] objectAtIndex:0] objectForKey:@"passes"] intValue] == 2,
+          "the same clip on the same day is one entry, its passes only ever up");
+    NSDictionary *today = [lib clipOnDay:101];
+    CHECK(today && [[today objectForKey:@"video"] isEqualToString:@"JE4cI_Knzvc"] && [[today objectForKey:@"start"] doubleValue] == 300 &&
+          [lib clipOnDay:102] == nil, "today's clip, with its video");
+    [lib save];
+    RSLibrary *again = [[[RSLibrary alloc] initWithFolder:folder aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    CHECK([[again clipsFor:@"JE4cI_Knzvc"] count] == 2 && [again clipOnDay:100] != nil, "clips are saved");
+}
+
 // ---- Cutting a line's sound ------------------------------------------------
 
 // Four seconds of a 440 Hz tone, as a WAV file.
@@ -1163,6 +1223,7 @@ int main(int argc, const char *argv[])
         TestLibrary();
         TestLines();
         TestDictionary(fixtures);
+        TestClips(fixtures);
         TestClip();
         TestCommandLines();
         TestReports();

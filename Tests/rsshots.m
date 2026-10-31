@@ -253,6 +253,24 @@ int main(int argc, const char *argv[])
         [player keepSlipWord];
         printf("  kept     %s\n", [[player visibleNote] UTF8String]);
         [player toggleWordSlip];
+        // Today's clip: the card in each of its passes.
+        Spin(2.6);
+        [player setTimeForTesting:5.0];
+        [player setClipPassForTesting:RSClipListen];
+        printf("  clip     pass %d\n", (int)[player clipPass]);
+        ShootBoth([player window], out, @"player-clip-listen");
+        [player setClipPassForTesting:RSClipRead];
+        [player revealLine];
+        ShootBoth([player window], out, @"player-clip-read");
+        [player setClipPassForTesting:RSClipSay];
+        [player toggleRecordSayAlong];
+        Spin(2.2);
+        ShootBoth([player window], out, @"player-clip-say");
+        [player toggleRecordSayAlong];
+        [player setClipPassForTesting:RSClipDone];
+        Spin(2.2);
+        ShootBoth([player window], out, @"player-clip-done");
+        [player leaveClip];
         // The desk card the next day: a card to hear again, then the story.
         setenv("RUSSIAN_SHELF_NOW", "2026-10-15 20:30", 1);
         [c reloadRows];

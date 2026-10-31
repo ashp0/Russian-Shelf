@@ -104,6 +104,13 @@ typedef enum {
                  lemma:(NSString *)lemma detail:(NSString *)detail rank:(NSString *)rank note:(NSString *)note
                  hover:(NSInteger)hover;
 
+// ---- Today's clip (RSClips) ----
+// A ruled card at the top of the picture: which stretch, the three passes
+// with the one under way marked, what to do now, and the keys.
++ (NSSize)clipCardSizeIn:(NSRect)videoRect;
++ (void)drawClipCardIn:(NSRect)card span:(NSString *)span pass:(NSInteger)pass instruction:(NSString *)instruction
+                  keys:(NSString *)keys recording:(BOOL)recording;
+
 // ---- The transcript ----
 + (CGFloat)transcriptPadding;
 + (CGFloat)heightOfTranscriptLine:(NSString *)text width:(CGFloat)width;
