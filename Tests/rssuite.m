@@ -1,4 +1,4 @@
-// Russian Shelf's model, checked: the cryptography, the shelf format, the
+// Shelf's model, checked: the cryptography, the shelf format, the
 // sealed file, subtitles of both kinds, the library's rules for new shelves,
 // rotation and deletion, kept lines and their days, cutting a line's sound,
 // the yt-dlp command lines, reports, and git: real
@@ -238,6 +238,41 @@ static void TestShelfFormat(void)
     }
     CHECK([RSShelf shelfWithText:@"# Claude's note\n\nRussian Shelf 1\r\nstart: 2026-10-12\r\nvideo: JE4cI_Knzvc | S | T\r\n"
                          problem:&problem] != nil, "comments, blank lines and CRLF are fine");
+
+    // Kinds: a "# kind:" comment holds for the videos after it, and the text
+    // round-trips with them; a list without them has none until filled in.
+    RSShelf *kinds = [RSShelf shelfWithText:@"Russian Shelf 1\nstart: 2026-10-12\n# kind: easy\nvideo: vid00000001 | S | A\n"
+                      @"video: vid00000002 | S | B\n# Kind: FAST\nvideo: vid00000003 | Easy Russian | C — Russian subtitles on (S) the first time\n"
+                      @"# a note\nvideo: vid00000004 | S | D\n" problem:&problem];
+    CHECK(kinds && [[[[kinds videos] objectAtIndex:0] kind] isEqualToString:RSKindEasy] &&
+          [[[[kinds videos] objectAtIndex:1] kind] isEqualToString:RSKindEasy] &&
+          [[[[kinds videos] objectAtIndex:2] kind] isEqualToString:RSKindFast] &&
+          [[[[kinds videos] objectAtIndex:3] kind] isEqualToString:RSKindFast], "kind comments hold for the videos after them (%s)", [problem UTF8String]);
+    CHECK(Has([kinds text], @"# kind: easy\nvideo: vid00000001") && Has([kinds text], @"# kind: fast\nvideo: vid00000003") &&
+          !Has([kinds text], @"# kind: fast\nvideo: vid00000004"), "text writes a kind line where the kind changes");
+    CHECK([[[RSShelf shelfWithText:[kinds text] problem:&problem] text] isEqualToString:[kinds text]], "text with kinds round-trips");
+    CHECK(!Has([s text], @"# kind") && [[[s videos] objectAtIndex:0] kind] == nil, "a list without kinds has none");
+    CHECK([[[[kinds videos] objectAtIndex:2] displayTitle] isEqualToString:@"C"] &&
+          [[[[kinds videos] objectAtIndex:0] displayTitle] isEqualToString:@"A"], "the subtitles instruction is left off the shown title");
+    CHECK([[kinds videosOfKind:RSKindEasy] count] == 2 && [[kinds videosOfKind:RSKindFast] count] == 2 &&
+          [[kinds videosOfKind:RSKindNatural] count] == 0 && [[kinds videosOfKind:nil] count] == 0, "videos by kind");
+    CHECK([RSKinds() count] == 3 && [RSKindTitle(RSKindFast) isEqualToString:@"Fast speech"] && RSKindTitle(nil) == nil, "kind titles");
+
+    // Without kind lines: history.txt, then a guess from channel and title.
+    NSDictionary *history = RSKindsFromHistory(@"vid00000001 | 2026-10-09 | S | Old\n# kind: easy\nvid00000002 | 2026-10-30 | S | B\n"
+                                               @"# kind: natural\nvid00000001 | 2026-10-30 | S | A again\nnot an id | x | y | z\n# kind: fast\n");
+    CHECK([history count] == 2 && [[history objectForKey:@"vid00000001"] isEqualToString:RSKindNatural] &&
+          [[history objectForKey:@"vid00000002"] isEqualToString:RSKindEasy], "history.txt: the newest line for an id wins, lines before any kind count for nothing");
+    RSShelf *plain = [RSShelf shelfWithText:@"Russian Shelf 1\nstart: 2026-10-12\nvideo: vid00000001 | Sergey Storyteller | Walking in a Village | Slow Russian with Sergey\n"
+                      @"video: vid00000002 | Sergey Storyteller | X | Level A2\nvideo: vid00000003 | Easy Russian | What Are You Doing Today? | Easy Russian 53\n"
+                      @"video: vid00000004 | Sergey Storyteller | Who's Vasya? - Part 1 - Russian TPRS Course for Complete Beginners\n"
+                      @"video: vid00000005 | Comprehensible Russian | A walk\nvideo: vid00000006 | Someone | Level B1 talk\n" problem:&problem];
+    CHECK([plain fillKinds:history] && ![plain fillKinds:history], "filling in kinds changes them once");
+    NSArray *expect = [NSArray arrayWithObjects:RSKindNatural, RSKindEasy, RSKindFast, RSKindEasy, RSKindEasy, RSKindNatural, nil];
+    for (NSUInteger i = 0; i < [expect count]; i++)
+        CHECK([[[[plain videos] objectAtIndex:i] kind] isEqualToString:[expect objectAtIndex:i]], "video %lu: kind %s, expected %s",
+              (unsigned long)i + 1, [[[[plain videos] objectAtIndex:i] kind] UTF8String], [[expect objectAtIndex:i] UTF8String]);
+    CHECK([[RSVideo inferredKindForChannel:@"Easy Russian" title:@"Level A1 story"] isEqualToString:RSKindFast], "the channel decides before the title");
 
     RSShelf *a = [[RSShelf shelfWithText:ListText(1, @"2026-10-12") problem:&problem] shelfSealedAt:@"2026-10-11 20:00:00"];
     RSShelf *b = [a shelfSealedAt:@"2026-10-11 21:00:00"];

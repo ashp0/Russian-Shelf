@@ -56,6 +56,12 @@
 - (void)show;
 - (void)close;
 
+// The video's kind (RSKind...) and whether this is the first time through.
+// A fast video the first time through opens with Russian subtitles on (the
+// research for hard native video); S still turns them off. Set before -show.
+- (void)setKind:(NSString *)kind firstViewing:(BOOL)first;
+@property (nonatomic, readonly, copy) NSString *kind;
+
 - (void)togglePlay;
 - (void)skip:(double)seconds;
 - (void)revealLine;

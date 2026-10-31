@@ -44,6 +44,7 @@ static NSString *RSTimeText(time_t t)
     NSMutableDictionary *_problems;     // id -> why the last try failed
     NSMutableDictionary *_thumbnails;   // id -> NSImage
     NSString *_syncSummary, *_reportNote, *_testingStatus;
+    NSDictionary *_kinds;               // id -> kind, from Russian/history.txt
     BOOL _syncProblem, _testingProblem, _refreshing, _pushing, _watchChanged;
     time_t _checkedAt;
     NSTimer *_refreshTimer, *_dayTimer;
@@ -89,6 +90,7 @@ static NSString *RSTimeText(time_t t)
     [_syncSummary release];
     [_reportNote release];
     [_testingStatus release];
+    [_kinds release];
     [super dealloc];
 }
 
@@ -143,7 +145,7 @@ static NSString *RSTimeText(time_t t)
         _window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, size.width, size.height)
             styleMask:NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask
               backing:NSBackingStoreBuffered defer:YES];
-        [_window setTitle:@"Russian Shelf"];
+        [_window setTitle:@"Shelf"];
         [_window setReleasedWhenClosed:NO];
         [_window setMinSize:[RSStyle shelfWindowMinSize]];
         [_window setBackgroundColor:[RSStyle windowBackground]];
@@ -218,6 +220,7 @@ static NSString *RSTimeText(time_t t)
         _syncProblem = YES;
     }
 
+    [self loadKinds];
     NSData *file = [NSData dataWithContentsOfFile:[self shelfFilePath]];
     if (file) {
         RSShelf *before = [[[_library current] retain] autorelease];
@@ -230,6 +233,23 @@ static NSString *RSTimeText(time_t t)
     [self updateStatus];
     [self startDownloads];
     [self pushReports];
+}
+
+// Which kind each video is, from the MacBook's history.txt (the sealed list
+// may carry it too; the list's word wins, then history, then a guess from
+// the channel and title).
+- (void)loadKinds
+{
+    NSString *text = [NSString stringWithContentsOfFile:[_studyFolder stringByAppendingPathComponent:@"Russian/history.txt"]
+                                               encoding:NSUTF8StringEncoding error:NULL];
+    [_kinds release];
+    _kinds = [RSKindsFromHistory(text) copy];
+}
+
+- (void)fillKinds
+{
+    [[_library current] fillKinds:_kinds];
+    [[_library pending] fillKinds:_kinds];
 }
 
 // A shelf that arrived early becomes this week's on its start day.
@@ -324,19 +344,60 @@ static NSString *RSTimeText(time_t t)
     return image;
 }
 
+// The videos grouped by kind: easy stories first, then natural speech, then
+// fast speech; within a group, Claude's order.
+- (NSArray *)videosGrouped:(RSShelf *)shelf
+{
+    NSMutableArray *videos = [NSMutableArray array];
+    for (NSString *kind in RSKinds()) [videos addObjectsFromArray:[shelf videosOfKind:kind]];
+    [videos addObjectsFromArray:[shelf videosOfKind:nil]];
+    return videos;
+}
+
+- (NSArray *)deskLines
+{
+    RSShelf *shelf = [_library current];
+    if (shelf == nil) return [NSArray array];
+    NSMutableArray *lines = [NSMutableArray array];
+    NSUInteger due = [[_lines dueOn:RSToday()] count];
+    if (due) {
+        RSDeskLine *cards = [[[RSDeskLine alloc] init] autorelease];
+        [cards setLabel:@"Cards"];
+        [cards setText:[NSString stringWithFormat:@"%lu to hear again", (unsigned long)due]];
+        [cards setKey:@"⌘L"];
+        [cards setAction:RSDeskCards];
+        [lines addObject:cards];
+    }
+    NSString *next = [_library nextIdentifier];
+    RSVideo *video = next ? [shelf videoWithIdentifier:next] : nil;
+    if (video) {
+        RSDeskLine *watch = [[[RSDeskLine alloc] init] autorelease];
+        [watch setLabel:[lines count] ? @"Then watch" : @"Watch"];
+        [watch setText:[_library isDownloaded:next] ? [video displayTitle]
+                                                    : [[video displayTitle] stringByAppendingString:@" (downloading)"]];
+        [watch setKey:@"Return"];
+        [watch setIdentifier:next];
+        [watch setAction:RSDeskWatch];
+        [lines addObject:watch];
+    }
+    return lines;
+}
+
 - (void)reloadRows
 {
     if (_shelfView == nil) return;
+    [self fillKinds];
     RSShelf *shelf = [_library current];
     NSString *next = [_library nextIdentifier];
     NSMutableArray *rows = [NSMutableArray array];
-    for (RSVideo *video in [shelf videos]) {
+    for (RSVideo *video in [self videosGrouped:shelf]) {
         NSString *identifier = [video identifier];
         RSWatch *watch = [_library watchFor:identifier];
         RSRowModel *row = [[[RSRowModel alloc] init] autorelease];
         [row setIdentifier:identifier];
-        [row setTitle:[video title]];
+        [row setTitle:[video displayTitle]];
         [row setChannel:[video channel]];
+        [row setKind:[video kind]];
         [row setThumbnail:[self thumbnailFor:identifier]];
         [row setDuration:[watch duration]];
         [row setWatched:[watch furthest]];
@@ -355,13 +416,12 @@ static NSString *RSTimeText(time_t t)
         }
         [rows addObject:row];
     }
+    [_shelfView setDeskLines:[self deskLines]];
     [_shelfView setRows:rows];
     if (shelf) {
         [_shelfView setTitle:@"This week’s shelf"];
         NSMutableString *sub = [NSMutableString stringWithFormat:@"From %@, chosen by Claude.", RSDayText([shelf start])];
         if ([_library pending]) [sub appendFormat:@" Next shelf from %@.", RSDayText([[_library pending] start])];
-        NSUInteger due = [[_lines dueOn:RSToday()] count];
-        if (due) [sub appendFormat:@" %lu line%s to hear again (⌘L).", (unsigned long)due, due == 1 ? "" : "s"];
         [_shelfView setSubtitle:sub];
     }
     [_shelfView setEmptyTitle:@"No shelf yet"];
@@ -411,6 +471,16 @@ static NSString *RSTimeText(time_t t)
     [self playVideo:[row identifier]];
 }
 
+- (void)shelfView:(RSShelfView *)view choseDeskLine:(RSDeskLine *)line
+{
+    switch ([line action]) {
+        case RSDeskCards: [self showLines]; break;
+        case RSDeskWatch: if (![self playVideo:[line identifier]]) NSBeep(); break;
+        case RSDeskClip:
+        case RSDeskSay:   NSBeep(); break;        // later phases
+    }
+}
+
 // ---- Playing ------------------------------------------------------------------------
 
 - (RSPlayer *)playVideo:(NSString *)identifier
@@ -423,11 +493,12 @@ static NSString *RSTimeText(time_t t)
     }
     RSWatch *watch = [_library watchFor:identifier];
     RSSubtitles *subtitles = [RSSubtitles subtitlesWithFile:[_library subtitlesPath:identifier]];
-    _player = [[RSPlayer alloc] initWithIdentifier:identifier title:[video title] movie:[_library moviePath:identifier]
+    _player = [[RSPlayer alloc] initWithIdentifier:identifier title:[video displayTitle] movie:[_library moviePath:identifier]
                                          subtitles:subtitles position:[watch position] furthest:[watch furthest]
                                           duration:[watch duration]];
     [_player setDelegate:self];
     [_player setFelt:[_library feltFor:identifier] want:[_library wantFor:identifier]];
+    [_player setKind:[video kind] firstViewing:![watch finished]];
     [_player show];
     return _player;
 }
@@ -473,7 +544,7 @@ static NSString *RSTimeText(time_t t)
     _watchChanged = YES;
     // The sound is cut in the background; without it the line is still kept.
     RSCutClip([_library moviePath:identifier], [line start], [line end], [_lines soundPath:kept], ^(BOOL ok, NSString *why) {
-        if (!ok) NSLog(@"Russian Shelf: %@", why);
+        if (!ok) NSLog(@"Shelf: %@", why);
     });
     [self reloadRows];
     return @"Kept. It comes back tomorrow (⌘L).";
@@ -602,20 +673,20 @@ static NSString *RSKey(unichar c)
     NSMenu *bar = [[[NSMenu alloc] initWithTitle:@""] autorelease];
     NSUInteger cmd = NSCommandKeyMask;
 
-    NSMenu *app = [[[NSMenu alloc] initWithTitle:@"Russian Shelf"] autorelease];
-    RSItem(app, @"About Russian Shelf", @selector(orderFrontStandardAboutPanel:), nil, 0, NSApp);
+    NSMenu *app = [[[NSMenu alloc] initWithTitle:@"Shelf"] autorelease];
+    RSItem(app, @"About Shelf", @selector(orderFrontStandardAboutPanel:), nil, 0, NSApp);
     [app addItem:[NSMenuItem separatorItem]];
-    RSItem(app, @"Hide Russian Shelf", @selector(hide:), @"h", cmd, NSApp);
+    RSItem(app, @"Hide Shelf", @selector(hide:), @"h", cmd, NSApp);
     RSItem(app, @"Hide Others", @selector(hideOtherApplications:), @"h", cmd | NSAlternateKeyMask, NSApp);
     RSItem(app, @"Show All", @selector(unhideAllApplications:), nil, 0, NSApp);
     [app addItem:[NSMenuItem separatorItem]];
-    RSItem(app, @"Quit Russian Shelf", @selector(terminate:), @"q", cmd, NSApp);
+    RSItem(app, @"Quit Shelf", @selector(terminate:), @"q", cmd, NSApp);
 
     NSMenu *shelf = [[[NSMenu alloc] initWithTitle:@"Shelf"] autorelease];
     RSItem(shelf, @"Show the Shelf", @selector(showShelf:), @"1", cmd, self);
     RSItem(shelf, @"Look for a New Shelf", @selector(refresh:), @"r", cmd, self);
     [shelf addItem:[NSMenuItem separatorItem]];
-    RSItem(shelf, @"Lines to Hear Again", @selector(showLines:), @"l", cmd, self);
+    RSItem(shelf, @"Cards", @selector(showLines:), @"l", cmd, self);
 
     // Shown for the keys; the player window takes them itself, before
     // AVPlayerView does.

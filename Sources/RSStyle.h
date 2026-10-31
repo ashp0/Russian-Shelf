@@ -1,4 +1,4 @@
-// How Russian Shelf looks: every font, colour, size and drawn shape, in
+// How Shelf looks: every font, colour, size and drawn shape, in
 // this one file and RSStyle.m. The views (RSShelfView, RSPlayer) decide what
 // goes where and ask this for everything else, so a new look is a new
 // RSStyle.m.
@@ -28,6 +28,22 @@ typedef enum {
 @property (nonatomic) double duration;                // seconds, 0 if unknown
 @property (nonatomic) double watched;                 // furthest point played, seconds
 @property (nonatomic) BOOL finished, next;            // finished; the next one to watch
+@property (nonatomic, copy) NSString *kind;           // RSKind..., for the plate above its group
+@end
+
+// One line of the desk card: a thing to do today, in the research's order
+// (DESIGN.md): Cards, Clip, Say, then the story. Each opens when clicked.
+typedef enum {
+    RSDeskCards = 0,
+    RSDeskClip,
+    RSDeskSay,
+    RSDeskWatch
+} RSDeskAction;
+
+@interface RSDeskLine : NSObject
+@property (nonatomic, copy) NSString *label, *text, *key;    // "Cards", "7 to hear again", "⌘L"
+@property (nonatomic, copy) NSString *identifier;            // the video, for RSDeskWatch
+@property (nonatomic) RSDeskAction action;
 @end
 
 @interface RSStyle : NSObject
@@ -44,6 +60,14 @@ typedef enum {
 + (CGFloat)rowHeight;
 + (CGFloat)statusBarHeight;
 + (void)drawHeaderIn:(NSRect)rect title:(NSString *)title subtitle:(NSString *)subtitle;
+// The desk card under the crown: cream, "Today", one line per thing to do.
+// Height 0 for no lines (then nothing is drawn).
++ (CGFloat)deskCardHeightForLines:(NSUInteger)count;
++ (NSArray *)deskLineRectsIn:(NSRect)rect count:(NSUInteger)count;      // NSValue rects, for clicks
++ (void)drawDeskCardIn:(NSRect)rect lines:(NSArray *)lines hover:(NSInteger)hover;
+// A small brass plate on the back wall above a group of one kind.
++ (CGFloat)kindPlateHeight;
++ (void)drawKindPlateIn:(NSRect)rect title:(NSString *)title;
 + (void)drawRow:(RSRowModel *)row in:(NSRect)rect hover:(BOOL)hover pressed:(BOOL)pressed selected:(BOOL)selected;
 + (void)drawEmptyShelfIn:(NSRect)rect title:(NSString *)title message:(NSString *)message;
 // Bare shelves, rowHeight apart, for the space under the last video.

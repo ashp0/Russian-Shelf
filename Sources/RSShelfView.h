@@ -10,6 +10,7 @@
 
 @protocol RSShelfViewDelegate <NSObject>
 - (void)shelfView:(RSShelfView *)view choseRow:(RSRowModel *)row;
+- (void)shelfView:(RSShelfView *)view choseDeskLine:(RSDeskLine *)line;
 @end
 
 @interface RSShelfView : NSView
@@ -17,12 +18,15 @@
 @property (nonatomic, assign) id<RSShelfViewDelegate> delegate;
 @property (nonatomic, copy) NSString *title, *subtitle;            // the header
 @property (nonatomic, copy) NSString *emptyTitle, *emptyMessage;   // when there are no rows
-@property (nonatomic, copy) NSArray *rows;                         // RSRowModel
+@property (nonatomic, copy) NSArray *rows;                         // RSRowModel, grouped by kind
+@property (nonatomic, copy) NSArray *deskLines;                    // RSDeskLine; empty: no card
 
 - (NSInteger)rowAtPoint:(NSPoint)point;
 - (NSRect)rectOfRow:(NSInteger)index;
 - (void)fitToWidth;      // height for the rows, at least the visible height
 - (void)hoverRow:(NSInteger)index;     // for the screenshots
+- (void)hoverDeskLine:(NSInteger)index;
+- (NSRect)deskCardRect;
 
 @end
 

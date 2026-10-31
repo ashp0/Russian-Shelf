@@ -1,4 +1,4 @@
-// Renders Russian Shelf's windows to PNG, offscreen, at 1x and 2x.
+// Renders Shelf's windows to PNG, offscreen, at 1x and 2x.
 //
 //   rsshots <Tests/Fixtures> <output folder>      (RUSSIAN_SHELF_NOW fixes the clock)
 //
@@ -164,9 +164,13 @@ int main(int argc, const char *argv[])
         [[NSFileManager defaultManager] removeItemAtPath:folder error:NULL];
         RSLibrary *library = [[[RSLibrary alloc] initWithFolder:folder aesKey:AES() publicKey:Hex(KeyPublic)] autorelease];
         NSMutableString *text = [NSMutableString stringWithString:@"Russian Shelf 1\nstart: 2026-10-12\nsealed: 2026-10-11 20:15:07\n"];
-        for (int i = 0; i < 12; i++)
+        for (int i = 0; i < 12; i++) {
+            if (i == 0) [text appendString:@"# kind: easy\n"];
+            if (i == 7) [text appendString:@"# kind: natural\n"];
+            if (i == 10) [text appendString:@"# kind: fast\n"];
             [text appendFormat:@"video: %@ | %@ | %@\n", [NSString stringWithUTF8String:Videos[i][0]],
              [NSString stringWithUTF8String:Videos[i][1]], [NSString stringWithUTF8String:Videos[i][2]]];
+        }
         NSData *iv = Hex("f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff");
         NSString *problem = nil;
         NSData *file = RSSealShelf([RSShelf shelfWithText:text problem:&problem], AES(), iv,
@@ -238,6 +242,14 @@ int main(int argc, const char *argv[])
         [player keepLine];
         printf("  kept     %s\n", [[player visibleNote] UTF8String]);
         ShootBoth([player window], out, @"player-keep");
+        // The desk card the next day: a card to hear again, then the story.
+        setenv("RUSSIAN_SHELF_NOW", "2026-10-15 20:30", 1);
+        [c reloadRows];
+        [[c shelfView] hoverDeskLine:0];
+        printf("  desk     %lu lines\n", (unsigned long)[[[c shelfView] deskLines] count]);
+        ShootBoth([c window], out, @"shelf-desk");
+        [[c shelfView] hoverDeskLine:-1];
+        setenv("RUSSIAN_SHELF_NOW", "2026-10-14 20:30", 1);
         // After watching: how was it? One click each, about the video.
         [player chooseFeedback:RSFeltAboutRight];
         [player chooseFeedback:RSWantMore];

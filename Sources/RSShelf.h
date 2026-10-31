@@ -23,11 +23,35 @@
 
 enum { RSShelfMaxVideos = 12 };
 
+// The three kinds of video on a shelf, by how the owner meets them (DESIGN.md):
+// easy (followed almost completely, subtitles off), natural (A2-B1 speech,
+// subtitles off, lines to work on), fast (natives at their own pace: Russian
+// subtitles on the first time through, then off). A list may say which with a
+// comment line before the videos it describes:
+//
+//     # kind: fast
+//
+// The MacBook's history.txt carries the same lines; a video with no kind in
+// the list takes it from there, and failing that from its channel and title.
+extern NSString *const RSKindEasy, *const RSKindNatural, *const RSKindFast;
+// The three, in the order they stand on the bookcase.
+NSArray *RSKinds(void);
+// "Easy stories", "Natural speech", "Fast speech"; nil for nil.
+NSString *RSKindTitle(NSString *kind);
+
 @interface RSVideo : NSObject
 @property (nonatomic, copy) NSString *identifier;   // YouTube's 11-character id
 @property (nonatomic, copy) NSString *channel;
 @property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSString *kind;         // RSKind..., or nil until filled in
 + (BOOL)isValidIdentifier:(NSString *)identifier;
+// The title without the skill's instruction suffix (" — Russian subtitles on
+// (S) the first time"): the app does that itself now.
+- (NSString *)displayTitle;
+// From the channel and title alone: Easy Russian is fast; "Level A1/A2",
+// "TPRS", "Complete Beginners", "Short Stories", "Story in Easy Russian" and
+// Comprehensible Russian are easy; everything else natural.
++ (NSString *)inferredKindForChannel:(NSString *)channel title:(NSString *)title;
 @end
 
 @interface RSShelf : NSObject
@@ -46,10 +70,19 @@ enum { RSShelfMaxVideos = 12 };
 
 - (RSVideo *)videoWithIdentifier:(NSString *)identifier;
 - (NSArray *)identifiers;
+// Gives every video without a kind one: from `kinds` (id -> RSKind..., say
+// RSKindsFromHistory's), else inferred. Returns YES if any changed.
+- (BOOL)fillKinds:(NSDictionary *)kinds;
+// The videos of one kind, in the list's order (kind nil: those without one).
+- (NSArray *)videosOfKind:(NSString *)kind;
 // Later start, or the same start sealed later (a correction).
 - (BOOL)isNewerThan:(RSShelf *)other;
 
 @end
+
+// id -> kind, from Russian/history.txt's "# kind: easy" sections and its
+// "id | start | channel | title" lines (the newest line for an id wins).
+NSDictionary *RSKindsFromHistory(NSString *text);
 
 // The signed part of a sealed file: its first line, the IV, the ciphertext.
 NSData *RSSignedMessage(NSData *iv, NSData *ciphertext);

@@ -1,4 +1,4 @@
-// `RussianShelf --selftest`, for the Mac Pro: everything the app relies on,
+// `Shelf --selftest`, for the Mac Pro: everything the app relies on,
 // checked on the Mac it runs on, one line each. Nothing is changed.
 //
 //   - the AES and signature code with 10.9's own CommonCrypto and Security

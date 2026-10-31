@@ -10,6 +10,30 @@ static NSString *const RSSealedHeader = @"Russian Shelf sealed 1";
 static const NSUInteger RSSealedMaxBytes = 64 * 1024;
 static const NSUInteger RSTitleMaxLength = 300;
 
+NSString *const RSKindEasy = @"easy", *const RSKindNatural = @"natural", *const RSKindFast = @"fast";
+
+NSArray *RSKinds(void)
+{
+    return [NSArray arrayWithObjects:RSKindEasy, RSKindNatural, RSKindFast, nil];
+}
+
+NSString *RSKindTitle(NSString *kind)
+{
+    if ([kind isEqualToString:RSKindEasy]) return @"Easy stories";
+    if ([kind isEqualToString:RSKindNatural]) return @"Natural speech";
+    if ([kind isEqualToString:RSKindFast]) return @"Fast speech";
+    return nil;
+}
+
+// "# kind: fast" -> "fast"; nil for any other comment.
+static NSString *RSKindInComment(NSString *line)
+{
+    NSString *rest = [[line substringFromIndex:1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    if (![[rest lowercaseString] hasPrefix:@"kind:"]) return nil;
+    NSString *kind = [[[rest substringFromIndex:5] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] lowercaseString];
+    return [RSKinds() containsObject:kind] ? kind : nil;
+}
+
 @implementation RSVideo
 
 - (void)dealloc
@@ -17,7 +41,34 @@ static const NSUInteger RSTitleMaxLength = 300;
     [_identifier release];
     [_channel release];
     [_title release];
+    [_kind release];
     [super dealloc];
+}
+
+- (NSString *)displayTitle
+{
+    NSRange r = [_title rangeOfString:@" — Russian subtitles"];
+    if (r.location == NSNotFound) r = [_title rangeOfString:@" - Russian subtitles"];
+    if (r.location == NSNotFound) r = [_title rangeOfString:@" -- Russian subtitles"];
+    return r.location == NSNotFound ? _title : [_title substringToIndex:r.location];
+}
+
+static BOOL RSHasWord(NSString *s, NSString *word)
+{
+    return [s rangeOfString:word options:NSCaseInsensitiveSearch].location != NSNotFound;
+}
+
++ (NSString *)inferredKindForChannel:(NSString *)channel title:(NSString *)title
+{
+    channel = channel ?: @"";
+    title = title ?: @"";
+    if (RSHasWord(channel, @"Easy Russian")) return RSKindFast;
+    if (RSHasWord(channel, @"Comprehensible Russian")) return RSKindEasy;
+    static NSString *const easy[] = { @"Level A1", @"Level A2", @"TPRS", @"Complete Beginners", @"Short Stories",
+                                      @"Story in Easy Russian", @"Stories in Easy Russian", @"for Beginners" };
+    for (size_t i = 0; i < sizeof easy / sizeof easy[0]; i++)
+        if (RSHasWord(title, easy[i])) return RSKindEasy;
+    return RSKindNatural;
 }
 
 + (BOOL)isValidIdentifier:(NSString *)identifier
@@ -82,11 +133,17 @@ static BOOL RSIsSealedTime(NSString *s)
     NSMutableArray *videos = [NSMutableArray array];
     NSMutableSet *seen = [NSMutableSet set];
     NSUInteger count = 0;
+    NSString *kind = nil;          // the last "# kind:" seen, for the videos after it
 
     for (NSUInteger i = 0; i < [lines count]; i++) {
         NSString *line = RSTrim([lines objectAtIndex:i]);
         NSUInteger number = i + 1;
-        if ([line length] == 0 || [line hasPrefix:@"#"]) continue;
+        if ([line length] == 0) continue;
+        if ([line hasPrefix:@"#"]) {
+            NSString *k = RSKindInComment(line);
+            if (k) kind = k;
+            continue;
+        }
         if (!headerSeen) {
             if (![line isEqualToString:RSPlainHeader]) {
                 *problem = [NSString stringWithFormat:@"Line %lu should say “%@”.", (unsigned long)number, RSPlainHeader];
@@ -144,6 +201,7 @@ static BOOL RSIsSealedTime(NSString *s)
             [video setIdentifier:identifier];
             [video setChannel:channel];
             [video setTitle:title];
+            [video setKind:kind];
             [videos addObject:video];
         } else {
             *problem = [NSString stringWithFormat:@"Line %lu isn’t part of a shelf.", (unsigned long)number];
@@ -169,8 +227,16 @@ static BOOL RSIsSealedTime(NSString *s)
 {
     NSMutableString *s = [NSMutableString stringWithFormat:@"%@\nstart: %@\n", RSPlainHeader, _startText];
     if (_sealed) [s appendFormat:@"sealed: %@\n", _sealed];
-    for (RSVideo *v in _videos)
+    NSString *kind = nil;
+    for (RSVideo *v in _videos) {
+        // A kind line only where the kind changes, so a list without them
+        // reads back as it was.
+        if ([v kind] && ![[v kind] isEqualToString:kind]) {
+            kind = [v kind];
+            [s appendFormat:@"# kind: %@\n", kind];
+        }
         [s appendFormat:@"video: %@ | %@ | %@\n", [v identifier], [v channel], [v title]];
+    }
     return s;
 }
 
@@ -198,6 +264,27 @@ static BOOL RSIsSealedTime(NSString *s)
     return ids;
 }
 
+- (BOOL)fillKinds:(NSDictionary *)kinds
+{
+    BOOL changed = NO;
+    for (RSVideo *v in _videos) {
+        if ([v kind]) continue;
+        NSString *k = [kinds objectForKey:[v identifier]];
+        if (![RSKinds() containsObject:k]) k = [RSVideo inferredKindForChannel:[v channel] title:[v title]];
+        [v setKind:k];
+        changed = YES;
+    }
+    return changed;
+}
+
+- (NSArray *)videosOfKind:(NSString *)kind
+{
+    NSMutableArray *found = [NSMutableArray array];
+    for (RSVideo *v in _videos)
+        if (kind ? [[v kind] isEqualToString:kind] : [v kind] == nil) [found addObject:v];
+    return found;
+}
+
 - (BOOL)isNewerThan:(RSShelf *)other
 {
     if (other == nil) return YES;
@@ -206,6 +293,24 @@ static BOOL RSIsSealedTime(NSString *s)
 }
 
 @end
+
+NSDictionary *RSKindsFromHistory(NSString *text)
+{
+    NSMutableDictionary *kinds = [NSMutableDictionary dictionary];
+    NSString *kind = nil;
+    for (NSString *raw in [[text ?: @"" stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"] componentsSeparatedByString:@"\n"]) {
+        NSString *line = RSTrim(raw);
+        if ([line length] == 0) continue;
+        if ([line hasPrefix:@"#"]) {
+            kind = RSKindInComment(line) ?: kind;
+            continue;
+        }
+        NSArray *parts = [line componentsSeparatedByString:@"|"];
+        NSString *identifier = [parts count] ? RSTrim([parts objectAtIndex:0]) : nil;
+        if (kind && [RSVideo isValidIdentifier:identifier]) [kinds setObject:kind forKey:identifier];
+    }
+    return kinds;
+}
 
 NSData *RSSignedMessage(NSData *iv, NSData *ciphertext)
 {

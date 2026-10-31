@@ -1,4 +1,4 @@
-// mkicon -- writes RussianShelf.iconset: the app's icon, drawn at every size.
+// mkicon -- writes Shelf.iconset: the app's icon, drawn at every size.
 //
 // A host tool: built for and run on the development machine, never shipped.
 // A 2013 Mac icon, an object rather than a tile, kept quiet on purpose

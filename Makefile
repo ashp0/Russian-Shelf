@@ -1,5 +1,5 @@
-# Russian Shelf -- the week's Russian videos, chosen by Claude, for the Mac
-# Pro (OS X 10.9).
+# Shelf -- the week's Russian videos, chosen by Claude, and the desk around
+# them, for the Mac Pro (OS X 10.9). (Russian Shelf until 2026-10-30.)
 #
 # One window: about twelve videos, in Claude's order, each with its
 # thumbnail, length and how far it's been watched. Clicking one plays it in a
@@ -13,7 +13,7 @@
 # ffmpeg, QuickJS) are in Deps/, built or checked for 10.9 by the scripts
 # there.
 #
-#   make            build build/RussianShelf.app
+#   make            build build/Shelf.app
 #   make run        build and open it (on ~/Study, or StudyFolder in its defaults)
 #   make test       the model: crypto, shelves, subtitles, rotation, yt-dlp
 #                   command lines, reports, real git (under Rosetta)
@@ -22,14 +22,14 @@
 #   make shots      render the shelf and the player to build/shots
 #   make verify     check the app and every bundled binary are Mavericks-compatible
 #   make analyze    clang static analyser; any finding fails
-#   make dist       all of the above, then "Russian Shelf.zip"
+#   make dist       all of the above, then "Shelf.zip"
 #   make shelfsign  build/shelfsign, for the MacBook (code-signed: see README)
 #   make keys       once: make the signing key and Sources/RSKeys.c
 #   make icon       regenerate the icon from Tools/mkicon.m
 #   make clean
 
-APP      := RussianShelf
-NAME     := Russian Shelf
+APP      := Shelf
+NAME     := Shelf
 BUILD    := build
 OBJ      := $(BUILD)/obj
 BUNDLE   := $(BUILD)/$(APP).app

@@ -12,6 +12,20 @@
     [_channel release];
     [_note release];
     [_thumbnail release];
+    [_kind release];
+    [super dealloc];
+}
+
+@end
+
+@implementation RSDeskLine
+
+- (void)dealloc
+{
+    [_label release];
+    [_text release];
+    [_key release];
+    [_identifier release];
     [super dealloc];
 }
 
@@ -289,8 +303,9 @@ static void RSDrawScrew(NSPoint c, CGFloat r)
     [slot stroke];
 }
 
-// A brass plate with an engraved title, screwed to the crown.
-static void RSDrawBrassPlate(NSRect plate, NSString *title, NSString *subtitle)
+// A brass plate with an engraved title, screwed to the crown (or, smaller,
+// to the back wall above a group).
+static void RSDrawBrassPlateSized(NSRect plate, NSString *title, NSString *subtitle, CGFloat titleSize)
 {
     NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect:plate xRadius:4 yRadius:4];
     [NSGraphicsContext saveGraphicsState];
@@ -322,10 +337,10 @@ static void RSDrawBrassPlate(NSRect plate, NSString *title, NSString *subtitle)
 
     // Engraved: dark letters with a bright edge under them.
     CGFloat textWidth = NSWidth(plate) - 2 * (inset + 10);
-    NSDictionary *t = RSTextShadowed(RSSerifBold(17), RSRGB(0x3d2a0a, 1), NSCenterTextAlignment, RSRGB(0xfff3cf, 0.75), -1);
+    NSDictionary *t = RSTextShadowed(RSSerifBold(titleSize), RSRGB(0x3d2a0a, 1), NSCenterTextAlignment, RSRGB(0xfff3cf, 0.75), -1);
     NSDictionary *s = RSTextShadowed(RSSerifItalic(11.5), RSRGB(0x5a4318, 1), NSCenterTextAlignment, RSRGB(0xfff3cf, 0.6), -1);
     BOOL flipped = RSFlipped();
-    CGFloat titleHeight = 22, subtitleHeight = subtitle ? 16 : 0, total = titleHeight + subtitleHeight;
+    CGFloat titleHeight = RSLineHeight(RSSerifBold(titleSize)) + 2, subtitleHeight = subtitle ? 16 : 0, total = titleHeight + subtitleHeight;
     CGFloat top = round(NSMidY(plate) - total / 2);
     NSRect titleRect = NSMakeRect(NSMidX(plate) - textWidth / 2, flipped ? top : NSMaxY(plate) - (top - NSMinY(plate)) - titleHeight,
                                   textWidth, titleHeight);
@@ -335,6 +350,11 @@ static void RSDrawBrassPlate(NSRect plate, NSString *title, NSString *subtitle)
                                     textWidth, subtitleHeight);
         RSDrawText(subtitle, s, subRect);
     }
+}
+
+static void RSDrawBrassPlate(NSRect plate, NSString *title, NSString *subtitle)
+{
+    RSDrawBrassPlateSized(plate, title, subtitle, 17);
 }
 
 // Cream card stock, lying flat on the shelf's back with a soft shadow.
@@ -475,6 +495,90 @@ static void RSDrawBar(NSRect r, double fraction, NSColor *fill)
     NSRect plate = NSMakeRect(round(NSMidX(rect) - width / 2), 0, width, 54);
     plate.origin.y = round(NSMinY(rect) + (NSHeight(rect) - 9 - NSHeight(plate)) / 2 + (RSFlipped() ? 0 : 9));
     RSDrawBrassPlate(plate, title, subtitle);
+}
+
+// ---- The desk card ------------------------------------------------------------
+//
+// A cream card pinned to the back wall under the crown: "Today", then a line
+// for each thing to do, in order. No ticks and no counts of days: a line is
+// simply there until its thing is done, then gone.
+
+static const CGFloat RSDeskLineHeight = 26, RSDeskPad = 14, RSDeskTop = 22, RSDeskBottom = 14, RSDeskHeading = 30;
+
+static NSRect RSDeskCard(NSRect rect)
+{
+    return NSMakeRect(NSMinX(rect) + 36, NSMinY(rect) + RSDeskTop, NSWidth(rect) - 72, NSHeight(rect) - RSDeskTop - RSDeskBottom);
+}
+
++ (CGFloat)deskCardHeightForLines:(NSUInteger)count
+{
+    if (count == 0) return 0;
+    return RSDeskTop + RSDeskPad + RSDeskHeading + count * RSDeskLineHeight + RSDeskPad + RSDeskBottom;
+}
+
++ (NSArray *)deskLineRectsIn:(NSRect)rect count:(NSUInteger)count
+{
+    NSMutableArray *rects = [NSMutableArray array];
+    NSRect card = RSDeskCard(rect);
+    BOOL flipped = RSFlipped();
+    for (NSUInteger i = 0; i < count; i++) {
+        CGFloat fromTop = RSDeskPad + RSDeskHeading + i * RSDeskLineHeight;
+        NSRect r = NSMakeRect(NSMinX(card) + RSDeskPad, flipped ? NSMinY(card) + fromTop : NSMaxY(card) - fromTop - RSDeskLineHeight,
+                              NSWidth(card) - 2 * RSDeskPad, RSDeskLineHeight);
+        [rects addObject:[NSValue valueWithRect:r]];
+    }
+    return rects;
+}
+
++ (void)drawDeskCardIn:(NSRect)rect lines:(NSArray *)lines hover:(NSInteger)hover
+{
+    RSDrawBack(rect);
+    RSDrawCastShadow(rect, 12);
+    if ([lines count] == 0) return;
+    NSRect card = RSDeskCard(rect);
+    RSDrawCard(card, 0, YES);
+    BOOL flipped = RSFlipped();
+    CGFloat x = NSMinX(card) + RSDeskPad, width = NSWidth(card) - 2 * RSDeskPad;
+    // The heading, with a red rule under it like the index cards.
+    NSRect head = NSMakeRect(x, flipped ? NSMinY(card) + RSDeskPad : NSMaxY(card) - RSDeskPad - 22, width, 22);
+    RSDrawText(@"Today", RSText(RSSerifBold(15), RSInk(), NSLeftTextAlignment, NSLineBreakByClipping), head);
+    CGFloat ruleY = flipped ? NSMaxY(head) + 3 : NSMinY(head) - 3;
+    [RSRGB(0xe08a8a, 0.85) set];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(card) + 1, ruleY, NSWidth(card) - 2, 1), NSCompositeSourceOver);
+    NSArray *rects = [self deskLineRectsIn:rect count:[lines count]];
+    NSDictionary *label = RSText(RSSerifBold(12), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByClipping);
+    NSDictionary *key = RSText(RSSerifItalic(11), RSInkFaint(), NSRightTextAlignment, NSLineBreakByClipping);
+    for (NSUInteger i = 0; i < [lines count]; i++) {
+        RSDeskLine *line = [lines objectAtIndex:i];
+        NSRect r = [[rects objectAtIndex:i] rectValue];
+        BOOL lit = (NSInteger)i == hover;
+        if (lit) {
+            [RSRGB(0xffffff, 0.5) set];
+            NSRectFillUsingOperation(NSInsetRect(r, -6, 0), NSCompositeSourceOver);
+        }
+        // A faint blue rule under each line, as on ruled card stock.
+        [RSRGB(0xa9c4e0, 0.5) set];
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(r), flipped ? NSMaxY(r) - 1 : NSMinY(r), NSWidth(r), 1), NSCompositeSourceOver);
+        CGFloat textTop = flipped ? NSMinY(r) + 4 : NSMinY(r) + 5;
+        RSDrawText([line label] ?: @"", label, NSMakeRect(NSMinX(r), textTop, 96, 18));
+        NSDictionary *text = RSText(RSSerif(14), lit ? RSRGB(0x1f3f8a, 1) : RSInk(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+        CGFloat keyWidth = [[line key] length] ? 70 : 0;
+        RSDrawText([line text] ?: @"", text, NSMakeRect(NSMinX(r) + 104, textTop - 1, NSWidth(r) - 104 - keyWidth, 20));
+        if (keyWidth) RSDrawText([line key], key, NSMakeRect(NSMaxX(r) - keyWidth, textTop + 1, keyWidth, 16));
+    }
+}
+
+// ---- Kind plates ----------------------------------------------------------------
+
++ (CGFloat)kindPlateHeight { return 40; }
+
++ (void)drawKindPlateIn:(NSRect)rect title:(NSString *)title
+{
+    RSDrawBack(rect);
+    RSDrawCastShadow(rect, 12);
+    CGFloat width = MIN(220, NSWidth(rect) - 40);
+    NSRect plate = NSMakeRect(NSMinX(rect) + 20, round(NSMidY(rect) - 13), width, 26);
+    RSDrawBrassPlateSized(plate, title ?: @"", nil, 12);
 }
 
 + (NSString *)metaTextFor:(RSRowModel *)row

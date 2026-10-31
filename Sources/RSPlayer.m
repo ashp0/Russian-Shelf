@@ -1,6 +1,7 @@
 #import "RSPlayer.h"
 #import "RSStyle.h"
 #import "RSSubtitles.h"
+#import "RSShelf.h"
 
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -340,7 +341,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     NSString *_felt, *_want;
     BOOL _feedbackOffered;
     RSSubtitles *_subtitles;
-    NSString *_title, *_note;
+    NSString *_title, *_note, *_kind, *_openingNote;
     double _position, _furthest, _duration, _lastTime, _testingTime, _revealAt;
     NSUInteger _revealIndex, _loopIndex;
     float _rate;
@@ -470,6 +471,8 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_identifier release];
     [_title release];
     [_note release];
+    [_kind release];
+    [_openingNote release];
     [super dealloc];
 }
 
@@ -503,11 +506,31 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_captionView setNeedsDisplay:YES];
 }
 
+- (NSString *)kind { return _kind; }
+
+- (void)setKind:(NSString *)kind firstViewing:(BOOL)first
+{
+    [_kind release];
+    _kind = [kind copy];
+    [_openingNote release];
+    _openingNote = nil;
+    if ([kind isEqualToString:RSKindFast] && first && [[_subtitles lines] count]) {
+        [self setSubtitlesOn:YES];
+        _openingNote = [@"Fast speech, first time through: Russian subtitles on. S turns them off." copy];
+        [self updateHints];
+    }
+}
+
 - (void)show
 {
     [_window makeKeyAndOrderFront:nil];
     [self play];
     [self tick];
+    if (_openingNote) {
+        [self showNote:_openingNote for:4];
+        [_openingNote release];
+        _openingNote = nil;
+    }
 }
 
 - (void)close

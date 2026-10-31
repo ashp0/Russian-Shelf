@@ -93,7 +93,7 @@ static const float RSReviewSlowerRate = 0.75;
         styleMask:NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask
           backing:NSBackingStoreBuffered defer:YES];
     [_window setOwner:self];
-    [_window setTitle:@"Lines to Hear Again"];
+    [_window setTitle:@"Cards"];
     [_window setReleasedWhenClosed:NO];
     [_window setDelegate:self];
     _view = [[RSReviewView alloc] initWithFrame:[[_window contentView] bounds]];

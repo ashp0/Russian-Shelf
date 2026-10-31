@@ -11,7 +11,7 @@
 
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-RES="$HERE/build/RussianShelf.app/Contents/Resources"
+RES="$HERE/build/Shelf.app/Contents/Resources"
 [ -x "$RES/python3/bin/python3.14" ] || { echo "Build the app first: make -C \"$HERE\"" >&2; exit 1; }
 export SSL_CERT_FILE="$RES/python3/lib/python3.14/site-packages/certifi/cacert.pem"
 exec "$RES/python3/bin/python3.14" -I -B -X utf8 "$RES/yt-dlp" --ignore-config --no-plugin-dirs \

@@ -227,7 +227,7 @@ static void TestLibrary(void)
 int RSSelfTestRun(void)
 {
     @autoreleasepool {
-        printf("Russian Shelf self-test on %s\n", [OSVersion() UTF8String]);
+        printf("Shelf self-test on %s\n", [OSVersion() UTF8String]);
         RSTools *tools = [RSTools bundled];
         NSString *temporary = [NSTemporaryDirectory() stringByAppendingPathComponent:@"russian-shelf-selftest"];
         [[NSFileManager defaultManager] createDirectoryAtPath:temporary withIntermediateDirectories:YES attributes:nil error:NULL];

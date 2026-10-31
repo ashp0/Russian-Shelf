@@ -1,9 +1,14 @@
 #import "RSShelfView.h"
+#import "RSShelf.h"
 
 @interface RSShelfView () {
-    NSInteger _hover, _pressed, _selected;
+    NSInteger _hover, _pressed, _selected, _deskHover, _deskPressed;
     NSTrackingArea *_tracking;
+    NSMutableArray *_tops;          // y of each row (rows grouped by kind, a plate before each group)
+    NSMutableArray *_plates;        // {y, title} of each kind plate
+    CGFloat _contentHeight;
 }
+- (void)layoutRows;
 @end
 
 @implementation RSShelfView
@@ -11,8 +16,11 @@
 - (id)initWithFrame:(NSRect)frame
 {
     if ((self = [super initWithFrame:frame])) {
-        _hover = _pressed = _selected = -1;
+        _hover = _pressed = _selected = _deskHover = _deskPressed = -1;
         _rows = [[NSArray alloc] init];
+        _deskLines = [[NSArray alloc] init];
+        _tops = [[NSMutableArray alloc] init];
+        _plates = [[NSMutableArray alloc] init];
     }
     return self;
 }
@@ -24,6 +32,9 @@
     [_emptyTitle release];
     [_emptyMessage release];
     [_rows release];
+    [_deskLines release];
+    [_tops release];
+    [_plates release];
     [_tracking release];
     [super dealloc];
 }
@@ -38,8 +49,50 @@
     [_rows release];
     _rows = [rows copy];
     if (_selected >= (NSInteger)[_rows count]) _selected = -1;
+    [self layoutRows];
     [self fitToWidth];
     [self setNeedsDisplay:YES];
+}
+
+- (void)setDeskLines:(NSArray *)lines
+{
+    if (lines == _deskLines) return;
+    [_deskLines release];
+    _deskLines = [lines copy];
+    _deskHover = _deskPressed = -1;
+    [self layoutRows];
+    [self fitToWidth];
+    [self setNeedsDisplay:YES];
+}
+
+- (NSRect)deskCardRect
+{
+    CGFloat h = [RSStyle deskCardHeightForLines:[_deskLines count]];
+    return NSMakeRect(0, [RSStyle headerHeight], NSWidth([self bounds]), h);
+}
+
+// Rows come grouped by kind (the controller orders them); a plate stands
+// above each group when there is more than one kind.
+- (void)layoutRows
+{
+    [_tops removeAllObjects];
+    [_plates removeAllObjects];
+    NSMutableSet *kinds = [NSMutableSet set];
+    for (RSRowModel *row in _rows) if ([row kind]) [kinds addObject:[row kind]];
+    BOOL plates = [kinds count] > 1;
+    CGFloat y = [RSStyle headerHeight] + [RSStyle deskCardHeightForLines:[_deskLines count]];
+    NSString *kind = nil;
+    for (RSRowModel *row in _rows) {
+        if (plates && [row kind] && ![[row kind] isEqualToString:kind]) {
+            kind = [row kind];
+            [_plates addObject:[NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithDouble:y], @"y",
+                                RSKindTitle(kind) ?: kind, @"title", nil]];
+            y += [RSStyle kindPlateHeight];
+        }
+        [_tops addObject:[NSNumber numberWithDouble:y]];
+        y += [RSStyle rowHeight];
+    }
+    _contentHeight = y;
 }
 
 - (void)setTitle:(NSString *)title
@@ -60,7 +113,8 @@
 {
     NSScrollView *scroll = [self enclosingScrollView];
     NSSize visible = scroll ? [[scroll contentView] bounds].size : [self frame].size;
-    CGFloat height = [RSStyle headerHeight] + [_rows count] * [RSStyle rowHeight];
+    if ([_tops count] != [_rows count]) [self layoutRows];
+    CGFloat height = _contentHeight;
     NSSize size = NSMakeSize(visible.width, MAX(visible.height, height));
     if (!NSEqualSizes(size, [self frame].size)) [self setFrameSize:size];
 }
@@ -73,15 +127,24 @@
 
 - (NSRect)rectOfRow:(NSInteger)index
 {
-    return NSMakeRect(0, [RSStyle headerHeight] + index * [RSStyle rowHeight], NSWidth([self bounds]), [RSStyle rowHeight]);
+    if (index < 0 || index >= (NSInteger)[_tops count]) return NSZeroRect;
+    return NSMakeRect(0, [[_tops objectAtIndex:(NSUInteger)index] doubleValue], NSWidth([self bounds]), [RSStyle rowHeight]);
 }
 
 - (NSInteger)rowAtPoint:(NSPoint)point
 {
-    CGFloat y = point.y - [RSStyle headerHeight];
-    if (y < 0 || point.x < 0 || point.x > NSWidth([self bounds])) return -1;
-    NSInteger i = (NSInteger)floor(y / [RSStyle rowHeight]);
-    return i < (NSInteger)[_rows count] ? i : -1;
+    if (point.x < 0 || point.x > NSWidth([self bounds])) return -1;
+    for (NSInteger i = 0; i < (NSInteger)[_rows count]; i++)
+        if (NSPointInRect(point, [self rectOfRow:i])) return i;
+    return -1;
+}
+
+- (NSInteger)deskLineAtPoint:(NSPoint)point
+{
+    NSArray *rects = [RSStyle deskLineRectsIn:[self deskCardRect] count:[_deskLines count]];
+    for (NSUInteger i = 0; i < [rects count]; i++)
+        if (NSPointInRect(point, NSInsetRect([[rects objectAtIndex:i] rectValue], -6, 0))) return (NSInteger)i;
+    return -1;
 }
 
 - (void)drawRect:(NSRect)dirty
@@ -93,6 +156,12 @@
         return;
     }
     if (NSIntersectsRect(header, dirty)) [RSStyle drawHeaderIn:header title:_title ?: @"" subtitle:_subtitle];
+    NSRect desk = [self deskCardRect];
+    if (NSHeight(desk) > 0 && NSIntersectsRect(desk, dirty)) [RSStyle drawDeskCardIn:desk lines:_deskLines hover:_deskHover];
+    for (NSDictionary *plate in _plates) {
+        NSRect r = NSMakeRect(0, [[plate objectForKey:@"y"] doubleValue], NSWidth(b), [RSStyle kindPlateHeight]);
+        if (NSIntersectsRect(r, dirty)) [RSStyle drawKindPlateIn:r title:[plate objectForKey:@"title"]];
+    }
     for (NSInteger i = 0; i < (NSInteger)[_rows count]; i++) {
         NSRect r = [self rectOfRow:i];
         if (!NSIntersectsRect(r, dirty)) continue;
@@ -130,19 +199,32 @@
     [self setRow:&_hover to:index];
 }
 
+- (void)hoverDeskLine:(NSInteger)index
+{
+    if (_deskHover == index) return;
+    _deskHover = index;
+    [self setNeedsDisplayInRect:[self deskCardRect]];
+}
+
 - (void)mouseMoved:(NSEvent *)event
 {
-    [self hoverRow:[self rowAtPoint:[self convertPoint:[event locationInWindow] fromView:nil]]];
+    NSPoint p = [self convertPoint:[event locationInWindow] fromView:nil];
+    [self hoverRow:[self rowAtPoint:p]];
+    [self hoverDeskLine:[self deskLineAtPoint:p]];
 }
 
 - (void)mouseExited:(NSEvent *)event
 {
     [self hoverRow:-1];
+    [self hoverDeskLine:-1];
 }
 
 - (void)mouseDown:(NSEvent *)event
 {
-    NSInteger i = [self rowAtPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+    NSPoint p = [self convertPoint:[event locationInWindow] fromView:nil];
+    _deskPressed = [self deskLineAtPoint:p];
+    if (_deskPressed >= 0) return;
+    NSInteger i = [self rowAtPoint:p];
     [self setRow:&_pressed to:i];
     [self setRow:&_selected to:i];
 }
@@ -155,7 +237,14 @@
 
 - (void)mouseUp:(NSEvent *)event
 {
-    NSInteger i = [self rowAtPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+    NSPoint p = [self convertPoint:[event locationInWindow] fromView:nil];
+    if (_deskPressed >= 0) {
+        NSInteger d = [self deskLineAtPoint:p];
+        if (d == _deskPressed && d < (NSInteger)[_deskLines count]) [_delegate shelfView:self choseDeskLine:[_deskLines objectAtIndex:(NSUInteger)d]];
+        _deskPressed = -1;
+        return;
+    }
+    NSInteger i = [self rowAtPoint:p];
     BOOL chosen = i >= 0 && i == _pressed;
     [self setRow:&_pressed to:-1];
     if (chosen) [self choose:i];

@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Russian Shelf</string>
+	<string>Shelf</string>
 	<key>CFBundleExecutable</key>
-	<string>RussianShelf</string>
+	<string>Shelf</string>
 	<key>CFBundleIconFile</key>
-	<string>RussianShelf</string>
+	<string>Shelf</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.russianshelf.RussianShelf</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Russian Shelf</string>
+	<string>Shelf</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -31,7 +31,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>This week's Russian videos, chosen by Claude: for OS X Mavericks. Downloads the way Wowfunhappy's Media Subscriptions does.</string>
+	<string>Shelf: the week's Russian videos, chosen by Claude, and the desk around them. For OS X Mavericks; downloads the way Wowfunhappy's Media Subscriptions does.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
