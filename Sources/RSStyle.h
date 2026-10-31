@@ -29,6 +29,7 @@ typedef enum {
 @property (nonatomic) double watched;                 // furthest point played, seconds
 @property (nonatomic) BOOL finished, next;            // finished; the next one to watch
 @property (nonatomic, copy) NSString *kind;           // RSKind..., for the plate above its group
+- (BOOL)isEqualToRow:(RSRowModel *)other;            // drawn the same (the same thumbnail object)
 @end
 
 // One line of the desk card: a thing to do today, in the research's order
@@ -44,6 +45,7 @@ typedef enum {
 @property (nonatomic, copy) NSString *label, *text, *key;    // "Cards", "7 to hear again", "⌘L"
 @property (nonatomic, copy) NSString *identifier;            // the video, for RSDeskWatch
 @property (nonatomic) RSDeskAction action;
+- (BOOL)isEqualToLine:(RSDeskLine *)other;
 @end
 
 @interface RSStyle : NSObject
@@ -142,6 +144,7 @@ typedef enum {
 + (NSSize)sayWindowSize;
 + (NSRect)sayBodyRectIn:(NSRect)rect;                           // where the islands text view goes
 + (NSRect)sayNoteRectIn:(NSRect)rect;                           // where the tutor's note is typed
++ (NSRect)sayGlassAreaIn:(NSRect)rect;                          // all that changes while the sand runs
 + (void)drawSayIn:(NSRect)rect heading:(NSString *)heading topic:(NSString *)topic passText:(NSString *)passText
          timeLeft:(NSString *)timeLeft fraction:(double)fraction recording:(BOOL)recording message:(NSString *)message
              note:(NSString *)note noteRow:(BOOL)noteRow editing:(BOOL)editing keys:(NSArray *)keys;

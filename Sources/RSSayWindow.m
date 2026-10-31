@@ -246,7 +246,7 @@
 {
     _secondsLeft -= 0.25;
     if (_secondsLeft <= 0) [self finishPass];
-    else [_view setNeedsDisplay:YES];
+    else [_view setNeedsDisplayInRect:[RSStyle sayGlassAreaIn:[_view bounds]]];
 }
 
 - (void)setSecondsLeftForTesting:(double)seconds

@@ -8,9 +8,14 @@
 // minute) from the fixtures. The player's video can't be drawn offscreen,
 // so a painted stand-in takes its place; the end-to-end run shows the real
 // thing.
+//
+// It also checks that a few redraws are narrow and complete: the shelf while a
+// video plays, the desk card, the sand running in Say (exits 1 if not).
 
 #import <Cocoa/Cocoa.h>
 #import <Security/Security.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 #import "RSController.h"
 #import "RSLibrary.h"
 #import "RSShelf.h"
@@ -152,6 +157,123 @@ static void ShootBoth(NSWindow *window, NSString *out, NSString *name)
 static void Spin(double seconds)
 {
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:seconds]];
+}
+
+// ---- Redraws: a view marks only what changed, and that is enough --------------
+//
+// Watch() has a view note each rect it marks to be drawn again; Patched()
+// clears and draws just those over a picture of the view from before, as the
+// window would, and Same() compares that with the view drawn whole afterwards.
+
+static NSMutableArray *Marked;
+static int Failed;
+
+static void MarkRect(id self, SEL _cmd, NSRect r)
+{
+    [Marked addObject:[NSValue valueWithRect:r]];
+    struct objc_super up = { self, class_getSuperclass(object_getClass(self)) };
+    ((void (*)(struct objc_super *, SEL, NSRect))objc_msgSendSuper)(&up, _cmd, r);
+}
+
+static void MarkAll(id self, SEL _cmd, BOOL flag)
+{
+    if (flag) [Marked addObject:[NSValue valueWithRect:[(NSView *)self bounds]]];
+    struct objc_super up = { self, class_getSuperclass(object_getClass(self)) };
+    ((void (*)(struct objc_super *, SEL, BOOL))objc_msgSendSuper)(&up, _cmd, flag);
+}
+
+static void Watch(NSView *view)
+{
+    Class plain = object_getClass(view);
+    NSString *name = [@"Marking" stringByAppendingString:NSStringFromClass(plain)];
+    Class marking = NSClassFromString(name);
+    if (marking == Nil) {
+        marking = objc_allocateClassPair(plain, [name UTF8String], 0);
+        class_addMethod(marking, @selector(setNeedsDisplayInRect:), (IMP)MarkRect, "v@:{CGRect={CGPoint=dd}{CGSize=dd}}");
+        class_addMethod(marking, @selector(setNeedsDisplay:), (IMP)MarkAll, "v@:c");
+        objc_registerClassPair(marking);
+    }
+    [Marked release];
+    Marked = [[NSMutableArray alloc] init];
+    object_setClass(view, marking);
+}
+
+static NSArray *Unwatch(NSView *view)
+{
+    object_setClass(view, class_getSuperclass(object_getClass(view)));
+    return Marked;
+}
+
+// Drawn as the window draws it (the same call as for a part, so text is
+// smoothed the same way), onto nothing.
+static NSBitmapImageRep *Snapshot(NSView *view)
+{
+    NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect:[view bounds]];
+    memset([rep bitmapData], 0, (size_t)([rep bytesPerRow] * [rep pixelsHigh]));
+    NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+    [view displayRectIgnoringOpacity:[view bounds] inContext:context];
+    [context flushGraphics];
+    return rep;
+}
+
+// Each rect cleared, as a window clears what it draws again, then drawn.
+static NSBitmapImageRep *Patched(NSView *view, NSBitmapImageRep *before, NSArray *rects)
+{
+    NSRect b = [view bounds];
+    CGFloat scale = [before pixelsWide] / NSWidth(b);
+    NSMutableArray *clipped = [NSMutableArray array];
+    for (NSValue *v in rects) {
+        NSRect r = NSIntersectionRect(NSIntegralRect([v rectValue]), b);
+        [clipped addObject:[NSValue valueWithRect:r]];
+        CGFloat top = [view isFlipped] ? NSMinY(r) - NSMinY(b) : NSMaxY(b) - NSMaxY(r);
+        NSInteger x0 = (NSInteger)(NSMinX(r) * scale), x1 = (NSInteger)(NSMaxX(r) * scale);
+        for (NSInteger y = (NSInteger)(top * scale); y < (NSInteger)((top + NSHeight(r)) * scale); y++)
+            memset([before bitmapData] + y * [before bytesPerRow] + x0 * [before bitsPerPixel] / 8, 0,
+                   (size_t)((x1 - x0) * [before bitsPerPixel] / 8));
+    }
+    NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:before];
+    for (NSValue *v in clipped) [view displayRectIgnoringOpacity:[v rectValue] inContext:context];
+    [context flushGraphics];
+    return before;
+}
+
+// The same pixels, give or take `slack` in a channel (a gradient drawn in
+// part rounds a level differently, as it does in a window).
+static BOOL Same(NSBitmapImageRep *a, NSBitmapImageRep *b, int slack)
+{
+    if ([a pixelsWide] != [b pixelsWide] || [a pixelsHigh] != [b pixelsHigh] || [a bytesPerRow] != [b bytesPerRow]) return NO;
+    const unsigned char *p = [a bitmapData], *q = [b bitmapData];
+    for (NSInteger i = 0; i < [a bytesPerRow] * [a pixelsHigh]; i++)
+        if (abs((int)p[i] - (int)q[i]) > slack) return NO;
+    return YES;
+}
+
+static NSRect Union(NSArray *rects)
+{
+    NSRect u = NSZeroRect;
+    for (NSValue *v in rects) u = NSUnionRect(u, [v rectValue]);
+    return u;
+}
+
+static void Check(BOOL ok, NSString *what)
+{
+    printf("  redraw   %s: %s\n", ok ? "ok" : "FAILED", [what UTF8String]);
+    if (!ok) Failed++;
+}
+
+// The view drawn after `change`, whole, is the picture before with only the
+// marked rects drawn again. Returns the rects.
+static NSArray *Redraws(NSView *view, NSString *what, void (^change)(void))
+{
+    NSBitmapImageRep *before = Snapshot(view);
+    NSBitmapImageRep *again = Snapshot(view);
+    Watch(view);
+    change();
+    NSArray *rects = [[Unwatch(view) copy] autorelease];
+    NSBitmapImageRep *after = Snapshot(view);
+    Check(!Same(again, after, 1), [what stringByAppendingString:@" changes the picture"]);
+    Check(Same(Patched(view, before, rects), after, 1), [what stringByAppendingString:@": what was marked is all that changed"]);
+    return rects;
 }
 
 int main(int argc, const char *argv[])
@@ -388,6 +510,12 @@ int main(int argc, const char *argv[])
         [say2 space];
         [say2 setSecondsLeftForTesting:71];
         ShootBoth([say2 window], out, @"say-running");
+        // A quarter second of sand: the glass's column is drawn again, not the card.
+        NSView *sayView = nil;
+        for (NSView *v in [[[say2 window] contentView] subviews]) if ([NSStringFromClass([v class]) isEqualToString:@"RSSayView"]) sayView = v;
+        NSArray *sand = Redraws(sayView, @"the sand running", ^{ [say2 performSelector:@selector(tick:) withObject:nil]; });
+        Check(NSEqualRects(Union(sand), [RSStyle sayGlassAreaIn:[sayView bounds]]) &&
+              NSWidth(Union(sand)) * 3 < NSWidth([sayView bounds]), @"only the sand-glass's column");
         [say2 setSecondsLeftForTesting:0];
         printf("  say      after pass 1: state %d, %s\n", (int)[say2 state], [[say2 visibleNote] UTF8String]);
         ShootBoth([say2 window], out, @"say-between");
@@ -404,6 +532,27 @@ int main(int argc, const char *argv[])
         [c reloadRows];
         ShootBoth([c window], out, @"shelf-after-say");
 
+        // The shelf while a video plays: its row and nothing else.
+        RSShelfView *shelf = [c shelfView];
+        NSArray *ids = [[shelf rows] valueForKey:@"identifier"];
+        NSUInteger playing = [ids indexOfObject:@"aaaaaaaaaa2"];
+        NSArray *row = Redraws(shelf, @"five seconds more watched", ^{
+            [[c library] recordPosition:300 furthest:300 duration:784 for:@"aaaaaaaaaa2"];
+            [c reloadRows];
+        });
+        Check(playing != NSNotFound && NSEqualRects(Union(row), [shelf rectOfRow:(NSInteger)playing]), @"only the playing video's row");
+        Watch(shelf);
+        [c reloadRows];
+        Check([Unwatch(shelf) count] == 0, @"nothing new: nothing drawn again");
+        NSUInteger deskLines = [[shelf deskLines] count];
+        NSArray *desk = Redraws(shelf, @"one more card to hear", ^{
+            [[c lines] keepText:@"Ещё одна строчка." before:nil video:@"JE4cI_Knzvc" title:@"Story" start:300 end:302
+                          today:RSToday() - 1 problem:NULL];
+            [c reloadRows];
+        });
+        if ([[shelf deskLines] count] == deskLines)
+            Check(NSEqualRects(Union(desk), [shelf deskCardRect]), @"only the desk card");
+
         // No shelf at all, and one turned away.
         NSString *emptyFolder = [out stringByAppendingPathComponent:@"empty-library"];
         [[NSFileManager defaultManager] removeItemAtPath:emptyFolder error:NULL];
@@ -415,5 +564,5 @@ int main(int argc, const char *argv[])
         [e setStatusForTesting:@"~/Study isn’t here yet." problem:YES];
         ShootBoth([e window], out, @"empty");
     }
-    return 0;
+    return Failed ? 1 : 0;
 }

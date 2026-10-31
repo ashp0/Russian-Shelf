@@ -16,6 +16,19 @@
     [super dealloc];
 }
 
+static BOOL RSSame(id a, id b)
+{
+    return a == b || [a isEqual:b];
+}
+
+- (BOOL)isEqualToRow:(RSRowModel *)other
+{
+    return other && RSSame(_identifier, [other identifier]) && RSSame(_title, [other title]) && RSSame(_channel, [other channel]) &&
+           RSSame(_note, [other note]) && _thumbnail == [other thumbnail] && _state == [other state] && _progress == [other progress] &&
+           _duration == [other duration] && _watched == [other watched] && _finished == [other finished] && _next == [other next] &&
+           RSSame(_kind, [other kind]);
+}
+
 @end
 
 @implementation RSDeskLine
@@ -27,6 +40,12 @@
     [_key release];
     [_identifier release];
     [super dealloc];
+}
+
+- (BOOL)isEqualToLine:(RSDeskLine *)other
+{
+    return other && RSSame(_label, [other label]) && RSSame(_text, [other text]) && RSSame(_key, [other key]) &&
+           RSSame(_identifier, [other identifier]) && _action == [other action];
 }
 
 @end
@@ -1309,6 +1328,21 @@ static NSRect RSSayCard(NSRect rect)
     return NSMakeRect(NSMinX(card) + 24, NSMinY(card) + 14, NSWidth(card) - 48, 24);
 }
 
+// The sand-glass's left edge: 100 points in from the card's padding on the right.
+static CGFloat RSSayGlassX(NSRect card)
+{
+    return NSMaxX(card) - 24 - 100;
+}
+
+// The sand-glass, its clock (150 wide, centred under it) and the recording
+// lamp stand in this column of the card, wherever the text puts them up or
+// down: while the sand runs, nothing else changes.
++ (NSRect)sayGlassAreaIn:(NSRect)rect
+{
+    NSRect card = RSSayCard(rect);
+    return NSMakeRect(RSSayGlassX(card) - 45 - 2, NSMinY(card), 150 + 4, NSHeight(card));
+}
+
 // A sand-glass: two bulbs in a brass frame, the sand draining from the top
 // bulb into the bottom one.
 static void RSDrawSandGlass(NSRect box, double fraction)
@@ -1419,7 +1453,7 @@ static void RSDrawSandGlass(NSRect box, double fraction)
         RSDrawText(message, m, NSMakeRect(NSMinX(body) + 20, round(NSMidY(body) - mh / 2), textWidth - 40, mh));
     }
     if (glassWidth) {
-        NSRect glass = NSMakeRect(NSMaxX(card) - pad - 100, NSMidY(body) - 50 + 12, 60, 100);
+        NSRect glass = NSMakeRect(RSSayGlassX(card), NSMidY(body) - 50 + 12, 60, 100);
         RSDrawSandGlass(glass, fraction);
         NSDictionary *tl = RSText(RSSerifBold(20), recording ? RSRGB(0xb3261e, 1) : RSInk(), NSCenterTextAlignment, NSLineBreakByClipping);
         RSDrawText(timeLeft, tl, NSMakeRect(NSMinX(glass) - 45, NSMinY(glass) - 30, 150, 26));

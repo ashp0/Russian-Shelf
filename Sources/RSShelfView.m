@@ -43,12 +43,25 @@
 - (BOOL)acceptsFirstResponder { return YES; }
 - (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
 
+// The same videos in the same places, kind by kind: only what changed in a
+// row is drawn again (the controller sets the rows every few seconds while a
+// video plays, for its progress). Otherwise the shelf is laid out afresh.
 - (void)setRows:(NSArray *)rows
 {
     if (rows == _rows) return;
-    [_rows release];
+    NSArray *old = [_rows autorelease];
     _rows = [rows copy];
     if (_selected >= (NSInteger)[_rows count]) _selected = -1;
+    BOOL same = [old count] == [_rows count];
+    for (NSUInteger i = 0; same && i < [old count]; i++) {
+        NSString *a = [(RSRowModel *)[old objectAtIndex:i] kind], *b = [(RSRowModel *)[_rows objectAtIndex:i] kind];
+        same = a == b || [a isEqualToString:b];
+    }
+    if (same) {
+        for (NSUInteger i = 0; i < [old count]; i++)
+            if (![[old objectAtIndex:i] isEqualToRow:[_rows objectAtIndex:i]]) [self setNeedsDisplayInRect:[self rectOfRow:(NSInteger)i]];
+        return;
+    }
     [self layoutRows];
     [self fitToWidth];
     [self setNeedsDisplay:YES];
@@ -57,9 +70,16 @@
 - (void)setDeskLines:(NSArray *)lines
 {
     if (lines == _deskLines) return;
-    [_deskLines release];
+    NSArray *old = [_deskLines autorelease];
     _deskLines = [lines copy];
+    BOOL same = [old count] == [_deskLines count];
+    for (NSUInteger i = 0; same && i < [old count]; i++) same = [[old objectAtIndex:i] isEqualToLine:[_deskLines objectAtIndex:i]];
+    if (same) return;
     _deskHover = _deskPressed = -1;
+    if ([old count] == [_deskLines count]) {
+        [self setNeedsDisplayInRect:[self deskCardRect]];
+        return;
+    }
     [self layoutRows];
     [self fitToWidth];
     [self setNeedsDisplay:YES];
@@ -95,18 +115,42 @@
     _contentHeight = y;
 }
 
+- (NSRect)headerRect
+{
+    return NSMakeRect(0, 0, NSWidth([self bounds]), [RSStyle headerHeight]);
+}
+
 - (void)setTitle:(NSString *)title
 {
+    if (title == _title || [title isEqualToString:_title]) return;
     [_title release];
     _title = [title copy];
-    [self setNeedsDisplay:YES];
+    [self setNeedsDisplayInRect:[self headerRect]];
 }
 
 - (void)setSubtitle:(NSString *)subtitle
 {
+    if (subtitle == _subtitle || [subtitle isEqualToString:_subtitle]) return;
     [_subtitle release];
     _subtitle = [subtitle copy];
-    [self setNeedsDisplay:YES];
+    [self setNeedsDisplayInRect:[self headerRect]];
+}
+
+// Shown only when there are no rows, filling the view.
+- (void)setEmptyTitle:(NSString *)title
+{
+    if (title == _emptyTitle || [title isEqualToString:_emptyTitle]) return;
+    [_emptyTitle release];
+    _emptyTitle = [title copy];
+    if ([_rows count] == 0) [self setNeedsDisplay:YES];
+}
+
+- (void)setEmptyMessage:(NSString *)message
+{
+    if (message == _emptyMessage || [message isEqualToString:_emptyMessage]) return;
+    [_emptyMessage release];
+    _emptyMessage = [message copy];
+    if ([_rows count] == 0) [self setNeedsDisplay:YES];
 }
 
 - (void)fitToWidth
@@ -150,7 +194,7 @@
 - (void)drawRect:(NSRect)dirty
 {
     NSRect b = [self bounds];
-    NSRect header = NSMakeRect(0, 0, NSWidth(b), [RSStyle headerHeight]);
+    NSRect header = [self headerRect];
     if ([_rows count] == 0) {
         [RSStyle drawEmptyShelfIn:b title:_emptyTitle ?: @"" message:_emptyMessage ?: @""];
         return;
