@@ -129,6 +129,9 @@ static NSString *RSTimeText(time_t t)
                                                    userInfo:nil repeats:YES];
     _dayTimer = [NSTimer scheduledTimerWithTimeInterval:RSDayCheckEvery target:self selector:@selector(advanceDay)
                                                userInfo:nil repeats:YES];
+    // Neither needs the minute: OS X may run them with other wakeups.
+    [_refreshTimer setTolerance:RSRefreshEvery / 12];
+    [_dayTimer setTolerance:RSDayCheckEvery / 5];
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector:@selector(didWake:)
                                                                name:NSWorkspaceDidWakeNotification object:nil];
 }
