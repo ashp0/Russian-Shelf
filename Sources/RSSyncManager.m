@@ -97,6 +97,7 @@ static BOOL RSWriteText(NSString *text, NSString *path)
     [_appFolder release];
     [_studyFolder release];
     [_host release];
+    [_note release];
     [super dealloc];
 }
 

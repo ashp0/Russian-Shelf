@@ -3,6 +3,7 @@
 #import "RSShelf.h"
 #import "RSSubtitles.h"
 #import "RSSync.h"
+#import "RSSyncManager.h"
 #import "RSReport.h"
 #import "RSDate.h"
 #import "RSLines.h"
@@ -39,6 +40,7 @@ static NSString *RSTimeText(time_t t)
     RSPlayer *_player;
     RSLines *_lines;
     RSReview *_review;
+    RSSyncManager *_sync;               // sync between the Macs, from the first pull
     NSString *_studyFolder;
     NSMutableDictionary *_progress;     // id -> NSNumber, while downloading
     NSMutableDictionary *_problems;     // id -> why the last try failed
@@ -82,6 +84,7 @@ static NSString *RSTimeText(time_t t)
     [_review setDelegate:nil];
     [_review release];
     [_lines release];
+    [_sync release];
     [_studyFolder release];
     [_progress release];
     [_problems release];
@@ -230,6 +233,7 @@ static NSString *RSTimeText(time_t t)
     [self updateStatus];
     [self startDownloads];
     [self pushReports];
+    if (result && [result ok]) [self syncWithOtherMacs];
 }
 
 // A shelf that arrived early becomes this week's on its start day.
@@ -394,6 +398,7 @@ static NSString *RSTimeText(time_t t)
     NSUInteger downloading = [_progress count];
     if (downloading) [parts addObject:[NSString stringWithFormat:@"Downloading %lu video%s.", (unsigned long)downloading, downloading == 1 ? "" : "s"]];
     if (_reportNote) [parts addObject:_reportNote];
+    if ([_sync note]) [parts addObject:[_sync note]];
     [_statusBar setText:[parts componentsJoinedByString:@"  "]];
     [_statusBar setProblem:problem];
 }
@@ -529,7 +534,7 @@ static NSString *RSTimeText(time_t t)
     _pushing = YES;
     NSString *folder = [[_studyFolder copy] autorelease];
     NSString *log = [[[_library folder] stringByAppendingPathComponent:@"Logs"] stringByAppendingPathComponent:@"report.log"];
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    dispatch_async([RSSyncManager gitQueue], ^{
         NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
         RSSyncResult *result = [[RSSync pushReports:reports folder:folder] retain];
         // What git said, for when the summary isn't enough.
@@ -553,6 +558,66 @@ static NSString *RSTimeText(time_t t)
         });
         [pool drain];
     });
+}
+
+// ---- Sync between the Macs (RSSyncManager.h) ---------------------------------------
+
+// After a pull: what the other Mac did comes in, then what this Mac did goes
+// out. One round at a time; its gits wait their turn behind the reports'.
+- (void)syncWithOtherMacs
+{
+    if (_sync == nil) _sync = [[RSSyncManager alloc] initWithAppFolder:[_library folder] studyFolder:_studyFolder];
+    if ([_sync busy] || ![RSSync isRepository:_studyFolder]) return;
+    [_sync setBusy:YES];
+    RSSyncManager *sync = _sync;
+    NSString *log = [[[_library folder] stringByAppendingPathComponent:@"Logs"] stringByAppendingPathComponent:@"sync.log"];
+    dispatch_async([RSSyncManager gitQueue], ^{
+        NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+        NSString *problem = nil;
+        BOOL taken = [sync takeOtherHosts:&problem];
+        [problem retain];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // What was done here is on disk before the merge reads it, and
+            // nothing can be done in between: this is the main thread.
+            [_library save];
+            [_lines save];
+            if (taken && [sync mergeInCards:_review == nil]) [self reloadAfterSync];
+            [sync stage];
+            dispatch_async([RSSyncManager gitQueue], ^{
+                NSAutoreleasePool *inner = [[NSAutoreleasePool alloc] init];
+                RSSyncResult *result = [[sync publish] retain];
+                [[NSFileManager defaultManager] createDirectoryAtPath:[log stringByDeletingLastPathComponent]
+                                          withIntermediateDirectories:YES attributes:nil error:NULL];
+                [[NSString stringWithFormat:@"%@\n%@\ngit: %@\n\n%@", problem ?: @"", [result summary], [RSSync gitPath], [result output]]
+                    writeToFile:log atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [sync setBusy:NO];
+                    // Only what went wrong, in a sentence; a read-only key
+                    // is said once, by the reports' note if it's there.
+                    if ([result ok] || ([result readOnly] && _reportNote)) [sync setNote:nil];
+                    else if ([result readOnly]) [sync setNote:[result summary]];
+                    else [sync setNote:[@"Not synced with the other Mac: " stringByAppendingString:[result summary]]];
+                    [result release];
+                    [problem release];
+                    [self updateStatus];
+                });
+                [inner drain];
+            });
+        });
+        [pool drain];
+    });
+}
+
+// The merge changed the files here: read them again. The cards only when
+// the Lines window hasn't got them (then they weren't merged).
+- (void)reloadAfterSync
+{
+    if (_review == nil) {
+        [_lines release];
+        _lines = [[RSLines alloc] initWithFolder:[[_library folder] stringByAppendingPathComponent:@"Lines"]];
+    }
+    [_library reload];
+    [self reloadRows];
 }
 
 // ---- Lines to hear again ----------------------------------------------------------

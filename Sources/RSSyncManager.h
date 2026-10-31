@@ -38,6 +38,7 @@
 @property (nonatomic, readonly, copy) NSString *appFolder, *studyFolder, *host;
 @property (nonatomic, readonly, copy) NSString *outFolder, *inFolder;   // Sync Out, Sync In
 @property (nonatomic) BOOL busy;                // a round is under way (the controller's to set)
+@property (nonatomic, copy) NSString *note;     // what went wrong last round, in a sentence, or nil
 
 + (dispatch_queue_t)gitQueue;
 
