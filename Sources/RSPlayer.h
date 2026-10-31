@@ -26,7 +26,7 @@
 #import <Cocoa/Cocoa.h>
 #import "RSLibrary.h"
 
-@class RSPlayer, RSSubtitles, RSLine;
+@class RSPlayer, RSSubtitles, RSLine, RSDictionary, RSDictionaryEntry;
 
 @protocol RSPlayerDelegate <NSObject>
 // Now and then while playing, at a pause, at the end, and on closing.
@@ -40,6 +40,10 @@
 // Keep this line (with the one before it, for context). Returns what to say:
 // that it's kept, or why not.
 - (NSString *)player:(RSPlayer *)player keepLine:(RSLine *)line before:(RSLine *)before;
+// Keep a word of this line, as the slip looked it up (entry nil: not in the
+// dictionary; kept with the word alone). Returns what to say.
+- (NSString *)player:(RSPlayer *)player keepWord:(NSString *)word entry:(RSDictionaryEntry *)entry
+                line:(RSLine *)line before:(RSLine *)before;
 @end
 
 @interface RSPlayer : NSObject <NSWindowDelegate>
@@ -72,6 +76,17 @@
 - (void)toggleLoop;
 - (void)toggleSlower;
 - (void)keepLine;
+
+// W: the word slip over the picture, for the line being said: its words as
+// small cards, the rarest chosen first (the one most likely unknown); ← →
+// choose, K keeps the word, W (or Esc) closes. The dictionary comes from the
+// controller (nil: the slip says so).
+@property (nonatomic, retain) RSDictionary *dictionary;
+@property (nonatomic, readonly) BOOL wordSlipShown;
+@property (nonatomic, readonly) NSInteger slipSelection;     // which word, while shown
+- (void)toggleWordSlip;
+- (void)chooseSlipWord:(NSInteger)index;
+- (void)keepSlipWord;
 
 // How the video felt, as chosen before (the controller sets it on opening).
 - (void)setFelt:(NSString *)felt want:(NSString *)want;

@@ -94,6 +94,16 @@ typedef enum {
 + (NSArray *)feedbackItemRectsIn:(NSRect)panel; // NSValue rects: the five choices, then the ✕
 + (void)drawFeedbackIn:(NSRect)panel felt:(NSString *)felt want:(NSString *)want hover:(NSInteger)hover;
 
+// ---- A word looked up (RSDictionary) ----
+// A cream slip at the top of the picture: the line's words as small cards,
+// the chosen one lifted; under them the lemma with its stress, what kind of
+// word, the glosses, and where it stands in the frequency list.
++ (NSSize)wordSlipSizeIn:(NSRect)videoRect words:(NSArray *)words;
++ (NSArray *)wordSlipItemRectsIn:(NSRect)slip words:(NSArray *)words;      // NSValue rects, one a word
++ (void)drawWordSlipIn:(NSRect)slip words:(NSArray *)words selected:(NSInteger)selected
+                 lemma:(NSString *)lemma detail:(NSString *)detail rank:(NSString *)rank note:(NSString *)note
+                 hover:(NSInteger)hover;
+
 // ---- The transcript ----
 + (CGFloat)transcriptPadding;
 + (CGFloat)heightOfTranscriptLine:(NSString *)text width:(CGFloat)width;
@@ -107,9 +117,11 @@ typedef enum {
 // nil: the line is still hidden. `prompt`: the owner's own words, to say in
 // Russian (then `text` is nil). `message` is for when there's no line up.
 // `meaningRow`: leave room at the card's foot for the meaning field.
+// `word`: a word card: that word is underlined in `text`, and `detail` (its
+// lemma, kind and gloss) is written under the line.
 + (void)drawReviewIn:(NSRect)rect heading:(NSString *)heading source:(NSString *)source before:(NSString *)before
-                text:(NSString *)text prompt:(NSString *)prompt message:(NSString *)message note:(NSString *)note
-          meaningRow:(BOOL)meaningRow keys:(NSArray *)keys;
+                text:(NSString *)text word:(NSString *)word detail:(NSString *)detail prompt:(NSString *)prompt
+             message:(NSString *)message note:(NSString *)note meaningRow:(BOOL)meaningRow keys:(NSArray *)keys;
 // Where the meaning field goes on the card, and how it looks.
 + (NSRect)reviewMeaningRectIn:(NSRect)rect note:(BOOL)note;
 + (void)styleMeaningField:(NSTextField *)field;

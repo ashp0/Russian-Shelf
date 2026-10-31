@@ -10,8 +10,8 @@
 //     lmnopqrstuv | not started | 0:00 of 9:12 | ...
 //     wxyz0123456 | not downloaded | - | ...
 //
-//     Help (shown, heard again, looped, slowed, transcript, subtitles, kept):
-//     JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | kept 2
+//     Help (shown, heard again, looped, slowed, transcript, subtitles, looked up, kept):
+//     JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | looked up 3 | kept 2
 //
 //     How it felt (the owner's own choice, about the video):
 //     JE4cI_Knzvc | about right | more like this
@@ -21,6 +21,9 @@
 //
 //     Kept:
 //     JE4cI_Knzvc | 4:10 | Она отрезала волосы. | means: She cut her hair.
+//
+//     Words kept (word (lemma) | gloss | the line):
+//     JE4cI_Knzvc | 4:10 | отрезала (отре́зать) | cut off | in: Она отрезала волосы.
 //
 // "partly" gives the furthest point reached by playing (skipping ahead
 // doesn't count). "from:" names the Mac that wrote it: each Mac keeps its own

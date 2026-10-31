@@ -65,11 +65,11 @@ CFLAGS    := $(COMMON) -std=gnu99
 OBJCFLAGS := $(COMMON) -fno-objc-arc -fobjc-exceptions -Wno-objc-missing-property-synthesis
 LDBASE    := -arch x86_64 -mmacosx-version-min=$(MIN) -isysroot "$(SDK)" -Wl,-dead_strip $(LDQUIET)
 FRAMEWORKS := -framework Cocoa -framework AVKit -framework AVFoundation -framework CoreMedia \
-              -framework Security -framework CoreServices
+              -framework Security -framework CoreServices -lsqlite3
 
 MODEL_SRC := Sources/RSDate.c Sources/RSKeys.c Sources/RSCrypto.m Sources/RSShelf.m Sources/RSSubtitles.m \
              Sources/RSProcess.m Sources/RSSync.m Sources/RSLibrary.m Sources/RSDownloader.m Sources/RSReport.m \
-             Sources/RSLines.m Sources/RSClip.m
+             Sources/RSLines.m Sources/RSClip.m Sources/RSDictionary.m
 VIEW_SRC  := Sources/RSStyle.m Sources/RSShelfView.m Sources/RSPlayer.m Sources/RSReview.m Sources/RSController.m \
              Sources/RSSelfTest.m
 APP_SRC   := $(MODEL_SRC) $(VIEW_SRC) Sources/main.m
@@ -84,7 +84,7 @@ APP_OBJ   := $(call obj,$(APP_SRC))
 DEPS      := Deps/python3/bin/python3.14 Deps/yt-dlp Deps/ffmpeg Deps/qjs
 YTDLP_VERSION = $(shell unzip -p Deps/yt-dlp yt_dlp/version.py 2>/dev/null | sed -n "s/^__version__ = '\(.*\)'/\1/p")
 
-.PHONY: all run test tlstest shots verify analyze dist icon clean shelfsign keys
+.PHONY: all run test tlstest shots verify analyze dist icon clean shelfsign keys dict
 
 all: $(BUNDLE)
 
@@ -110,13 +110,24 @@ $(MACOS)/$(APP): $(APP_OBJ)
 	@$(CC) $(LDBASE) $(FRAMEWORKS) $^ -o $@
 	@strip -x $@
 
-$(BUNDLE): $(MACOS)/$(APP) Resources/Info.plist Resources/shelf-ssh Resources/selftest.signed $(ICON) $(DEPS)
+# The dictionary (RSDictionary.h): built once from OpenRussian's CSVs and the
+# RNC frequency list with `make dict DICT_SRC=<folder> DICT_FREQ=<file>`, and
+# kept in the repo so every Mac can build the bundle.
+DICT      := Resources/dict.sqlite
+DICT_SRC  ?=
+DICT_FREQ ?=
+
+dict:
+	@test -n "$(DICT_SRC)" || { echo "make dict DICT_SRC=<folder with nouns.csv ...> DICT_FREQ=<freqrnc2011.csv>" >&2; exit 1; }
+	@python3 -I Tools/mkdict.py "$(DICT_SRC)" "$(DICT_FREQ)" $(DICT)
+
+$(BUNDLE): $(MACOS)/$(APP) Resources/Info.plist Resources/shelf-ssh Resources/selftest.signed $(ICON) $(DEPS) $(DICT)
 	@mkdir -p $(RES)
 	@cp Resources/Info.plist $(CONTENTS)/Info.plist
 	@/usr/libexec/PlistBuddy -c "Add :RSBundledYtDlpVersion string $(YTDLP_VERSION)" $(CONTENTS)/Info.plist
 	@printf 'APPL????' > $(CONTENTS)/PkgInfo
 	@cp $(ICON) $(RES)/$(APP).icns
-	@cp Resources/shelf-ssh Resources/selftest.signed $(RES)/
+	@cp Resources/shelf-ssh Resources/selftest.signed $(DICT) $(RES)/
 	@chmod 755 $(RES)/shelf-ssh
 	@rm -rf $(RES)/python3 $(RES)/LICENSES
 	@ditto Deps/python3 $(RES)/python3
@@ -142,7 +153,7 @@ $(SUITE): Tests/rssuite.m $(MODEL_OBJ)
 	@echo "  compile  Tests/rssuite.m"
 	@$(CC) $(OBJCFLAGS) -c Tests/rssuite.m -o $(OBJ)/rssuite.o
 	@$(CC) $(LDBASE) -framework Foundation -framework Security -framework AVFoundation -framework CoreMedia -framework CoreServices \
-	   $(MODEL_OBJ) $(OBJ)/rssuite.o -o $@
+	   -lsqlite3 $(MODEL_OBJ) $(OBJ)/rssuite.o -o $@
 
 test: $(SUITE)
 	@$(SUITE) "$(CURDIR)/Tests/Fixtures"
@@ -187,7 +198,7 @@ verify: $(BUNDLE)
 	  otool -L $$m | tail -n +2 | sed 's/^/   /'; \
 	  otool -L $$m | tail -n +2 | awk '{print $$1}' | \
 	    grep -vE '^/System/Library/Frameworks/(Cocoa|AppKit|Foundation|CoreFoundation|ApplicationServices|CoreServices|CoreGraphics|AVKit|AVFoundation|CoreMedia|QuartzCore|Security)\.framework/Versions/[A-Z]/[A-Za-z]+$$' | \
-	    grep -vE '^/usr/lib/(libSystem\.B|libobjc\.A)\.dylib$$' | \
+	    grep -vE '^/usr/lib/(libSystem\.B|libobjc\.A|libsqlite3)\.dylib$$' | \
 	    (! grep .) || { echo "FAIL: unexpected dylib above"; exit 1; }
 	@# A current SDK binds many Foundation classes to CoreFoundation, where they
 	@# live today, and a name 10.9's CoreFoundation lacks stops the app

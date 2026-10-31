@@ -2,6 +2,7 @@
 #import "RSStyle.h"
 #import "RSSubtitles.h"
 #import "RSShelf.h"
+#import "RSDictionary.h"
 
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -153,6 +154,85 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 - (void)drawRect:(NSRect)dirty
 {
     [RSStyle drawFeedbackIn:[self bounds] felt:_felt want:_want hover:_hover];
+}
+
+@end
+
+// ---- A word looked up ----------------------------------------------------------
+
+@interface RSWordSlipView : NSView {
+    NSInteger _hover;
+}
+@property (nonatomic, copy) NSArray *words;
+@property (nonatomic) NSInteger selected;
+@property (nonatomic, copy) NSString *lemma, *detail, *rank, *note;
+@property (nonatomic, assign) RSPlayer *owner;
+@end
+
+@implementation RSWordSlipView
+
+- (id)initWithFrame:(NSRect)frame
+{
+    if ((self = [super initWithFrame:frame])) _hover = -1;
+    return self;
+}
+
+- (void)dealloc
+{
+    [_words release];
+    [_lemma release];
+    [_detail release];
+    [_rank release];
+    [_note release];
+    [super dealloc];
+}
+
+- (NSView *)hitTest:(NSPoint)point
+{
+    return ![self isHidden] && NSPointInRect(point, [self frame]) ? self : nil;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
+
+- (NSInteger)itemAt:(NSEvent *)event
+{
+    NSPoint p = [self convertPoint:[event locationInWindow] fromView:nil];
+    NSArray *rects = [RSStyle wordSlipItemRectsIn:[self bounds] words:_words];
+    for (NSUInteger i = 0; i < [rects count]; i++)
+        if (NSPointInRect(p, NSInsetRect([[rects objectAtIndex:i] rectValue], -3, -3))) return (NSInteger)i;
+    return -1;
+}
+
+- (void)mouseDown:(NSEvent *)event { }
+- (void)mouseUp:(NSEvent *)event
+{
+    NSInteger i = [self itemAt:event];
+    if (i >= 0) [_owner chooseSlipWord:i];
+}
+
+- (void)updateTrackingAreas
+{
+    [super updateTrackingAreas];
+    for (NSTrackingArea *a in [self trackingAreas]) [self removeTrackingArea:a];
+    NSTrackingArea *area = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+        options:NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingActiveInActiveApp | NSTrackingInVisibleRect
+          owner:self userInfo:nil];
+    [self addTrackingArea:area];
+    [area release];
+}
+
+- (void)mouseMoved:(NSEvent *)event
+{
+    NSInteger i = [self itemAt:event];
+    if (i != _hover) { _hover = i; [self setNeedsDisplay:YES]; }
+}
+
+- (void)mouseExited:(NSEvent *)event { _hover = -1; [self setNeedsDisplay:YES]; }
+
+- (void)drawRect:(NSRect)dirty
+{
+    [RSStyle drawWordSlipIn:[self bounds] words:_words selected:_selected lemma:_lemma detail:_detail rank:_rank
+                       note:_note hover:_hover];
 }
 
 @end
@@ -338,6 +418,11 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     RSTranscriptView *_transcriptView;
     RSHintBar *_hintBar;
     RSFeedbackView *_feedbackView;
+    RSWordSlipView *_slipView;
+    NSArray *_slipWords;            // the words of the line the slip is about
+    NSArray *_slipEntries;          // RSDictionaryEntry or NSNull, one a word
+    NSUInteger _slipLine;           // which line
+    NSInteger _slipSelection;
     NSString *_felt, *_want;
     BOOL _feedbackOffered;
     RSSubtitles *_subtitles;
@@ -432,6 +517,13 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_feedbackView setOwner:self];
     [_feedbackView setHidden:YES];
     [content addSubview:_feedbackView];
+
+    _slipView = [[RSWordSlipView alloc] initWithFrame:NSZeroRect];
+    [_slipView setOwner:self];
+    [_slipView setHidden:YES];
+    [content addSubview:_slipView];
+    _slipSelection = -1;
+    _slipLine = NSNotFound;
     // Asked once a visit, at 90%, unless it was answered or watched to there before.
     _feedbackOffered = duration > 0 && furthest >= 0.9 * duration;
 
@@ -465,6 +557,11 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_hintBar release];
     [_feedbackView setOwner:nil];
     [_feedbackView release];
+    [_slipView setOwner:nil];
+    [_slipView release];
+    [_slipWords release];
+    [_slipEntries release];
+    [_dictionary release];
     [_felt release];
     [_want release];
     [_subtitles release];
@@ -501,6 +598,8 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     NSSize panel = [RSStyle feedbackPanelSize];
     [_feedbackView setFrame:NSMakeRect(round(NSMidX(video) - panel.width / 2), NSMaxY(video) - 18 - panel.height,
                                        panel.width, panel.height)];
+    NSSize slip = [RSStyle wordSlipSizeIn:video words:_slipWords ?: [NSArray array]];
+    [_slipView setFrame:NSMakeRect(round(NSMidX(video) - slip.width / 2), NSMaxY(video) - 18 - slip.height, slip.width, slip.height)];
     [_transcriptScroll setFrame:NSMakeRect(NSMaxX(video), hint, side, NSHeight(b) - hint)];
     [_transcriptScroll setHidden:!_transcriptShown];
     [_captionView setNeedsDisplay:YES];
@@ -539,6 +638,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     _closed = YES;
     [self report];
     [self stopLoop];
+    [self hideWordSlip];
     [NSObject cancelPreviousPerformRequestsWithTarget:self];
     if (_observingRate) [_player removeObserver:self forKeyPath:@"rate"];
     _observingRate = NO;
@@ -1004,6 +1104,87 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [self showNote:said for:2.5];
 }
 
+// ---- A word looked up ----------------------------------------------------------
+
+- (BOOL)wordSlipShown { return ![_slipView isHidden]; }
+- (NSInteger)slipSelection { return [self wordSlipShown] ? _slipSelection : -1; }
+
+- (void)hideWordSlip
+{
+    [_slipView setHidden:YES];
+    [_slipWords release];
+    _slipWords = nil;
+    [_slipEntries release];
+    _slipEntries = nil;
+    _slipLine = NSNotFound;
+    _slipSelection = -1;
+    [self updateHints];
+}
+
+- (void)toggleWordSlip
+{
+    if ([self wordSlipShown]) { [self hideWordSlip]; return; }
+    if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles, so there are no words to look up." for:2.5]; return; }
+    NSUInteger i = [self lineMeantAt:[self currentTime]];
+    if (i == NSNotFound) { [self showNote:@"Nothing is being said just now." for:1.5]; return; }
+    RSLine *line = [[_subtitles lines] objectAtIndex:i];
+    NSArray *words = RSWordsInLine([line text]);
+    if ([words count] == 0) { [self showNote:@"No Russian words in this line." for:1.5]; return; }
+    [self hideFeedback];
+    _slipLine = i;
+    [_slipWords release];
+    _slipWords = [words copy];
+    NSMutableArray *entries = [NSMutableArray array];
+    NSInteger rarest = 0;
+    NSUInteger rarestRank = 0;
+    for (NSUInteger k = 0; k < [words count]; k++) {
+        RSDictionaryEntry *e = [_dictionary lookup:[words objectAtIndex:k]];
+        [entries addObject:e ?: (id)[NSNull null]];
+        // The rarest word first: the one the owner most likely doesn't know.
+        // Unknown to the dictionary counts as rarest of all.
+        NSUInteger rank = e == nil ? NSUIntegerMax : [e rank] == 0 ? NSUIntegerMax - 1 : [e rank];
+        if (rank > rarestRank) { rarestRank = rank; rarest = (NSInteger)k; }
+    }
+    [_slipEntries release];
+    _slipEntries = [entries copy];
+    [_slipView setWords:_slipWords];
+    [self layout];
+    [_slipView setHidden:NO];
+    [self chooseSlipWord:rarest];
+    // Shown while the slip is open, so the word can be read in its line.
+    _revealIndex = i;
+    _revealAt = [self currentTime];
+    [self updateCaptionAt:[self currentTime]];
+    [_delegate player:self helped:RSHelpLookedUp line:line];
+    [self updateHints];
+}
+
+- (void)chooseSlipWord:(NSInteger)index
+{
+    if (![self wordSlipShown] || [_slipWords count] == 0) return;
+    NSInteger count = (NSInteger)[_slipWords count];
+    _slipSelection = ((index % count) + count) % count;
+    id e = [_slipEntries objectAtIndex:(NSUInteger)_slipSelection];
+    RSDictionaryEntry *entry = e == [NSNull null] ? nil : e;
+    [_slipView setSelected:_slipSelection];
+    [_slipView setLemma:[entry accented]];
+    [_slipView setDetail:entry ? [NSString stringWithFormat:@"%@ · %@", [entry type], [entry gloss]] : nil];
+    [_slipView setRank:entry ? [entry rankText] : nil];
+    [_slipView setNote:_dictionary ? @"Not in the dictionary." : @"No dictionary in this build."];
+    [_slipView setNeedsDisplay:YES];
+}
+
+- (void)keepSlipWord
+{
+    if (![self wordSlipShown] || _slipSelection < 0 || _slipLine >= [[_subtitles lines] count]) return;
+    id e = [_slipEntries objectAtIndex:(NSUInteger)_slipSelection];
+    NSArray *lines = [_subtitles lines];
+    NSString *said = [_delegate player:self keepWord:[_slipWords objectAtIndex:(NSUInteger)_slipSelection]
+                                 entry:e == [NSNull null] ? nil : e line:[lines objectAtIndex:_slipLine]
+                                before:_slipLine > 0 ? [lines objectAtIndex:_slipLine - 1] : nil];
+    [self showNote:said for:2.5];
+}
+
 - (void)updateHints
 {
     [_hintBar setItems:[NSArray arrayWithObjects:
@@ -1014,6 +1195,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
         @"L", [self looping] ? @"Stop loop" : @"Loop",
         @"−", [self slower] ? @"Full speed" : @"Slower",
         @"K", @"Keep",
+        @"W", [self wordSlipShown] ? @"Close the word" : @"A word",
         @"S", _subtitlesOn ? @"Subtitles off" : @"Subtitles",
         @"T", _transcriptShown ? @"Hide transcript" : @"Transcript",
         [self fullScreen] ? @"Esc" : @"F", [self fullScreen] ? @"Leave full screen" : @"Full screen", nil]];
@@ -1033,6 +1215,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     NSPoint p = [[_window contentView] convertPoint:[event locationInWindow] fromView:nil];
     if (!NSPointInRect(p, picture)) return NO;
     if ([self feedbackShown] && NSPointInRect(p, [_feedbackView frame])) return NO;
+    if ([self wordSlipShown] && NSPointInRect(p, [_slipView frame])) return NO;
     [self toggleFullScreen];
     return YES;
 }
@@ -1043,8 +1226,8 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     if ([chars length] != 1) return NO;
     switch ([chars characterAtIndex:0]) {
         case ' ':                       [self togglePlay]; return YES;
-        case NSLeftArrowFunctionKey:    [self skip:-RSSkipSeconds]; return YES;
-        case NSRightArrowFunctionKey:   [self skip:RSSkipSeconds]; return YES;
+        case NSLeftArrowFunctionKey:    if ([self wordSlipShown]) [self chooseSlipWord:_slipSelection - 1]; else [self skip:-RSSkipSeconds]; return YES;
+        case NSRightArrowFunctionKey:   if ([self wordSlipShown]) [self chooseSlipWord:_slipSelection + 1]; else [self skip:RSSkipSeconds]; return YES;
         case NSDownArrowFunctionKey:    [self revealLine]; return YES;
         case NSUpArrowFunctionKey:      [self replayLine]; return YES;
         case 's': case 'S':             [self toggleSubtitles]; return YES;
@@ -1052,9 +1235,11 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
         case 'f': case 'F':             [self toggleFullScreen]; return YES;
         case 'l': case 'L':             [self toggleLoop]; return YES;
         case '-': case 0x2212:          [self toggleSlower]; return YES;
-        case 'k': case 'K':             [self keepLine]; return YES;
+        case 'k': case 'K':             if ([self wordSlipShown]) [self keepSlipWord]; else [self keepLine]; return YES;
         case 'h': case 'H':             [self toggleFeedback]; return YES;
+        case 'w': case 'W':             [self toggleWordSlip]; return YES;
         case 27:                        // Escape
+            if ([self wordSlipShown]) { [self toggleWordSlip]; return YES; }
             if (![self fullScreen]) return NO;
             [self toggleFullScreen];
             return YES;

@@ -7,6 +7,7 @@
 #import "RSDate.h"
 #import "RSLines.h"
 #import "RSClip.h"
+#import "RSDictionary.h"
 
 static const NSTimeInterval RSRefreshEvery = 60 * 60;
 static const NSTimeInterval RSDayCheckEvery = 5 * 60;
@@ -45,6 +46,7 @@ static NSString *RSTimeText(time_t t)
     NSMutableDictionary *_thumbnails;   // id -> NSImage
     NSString *_syncSummary, *_reportNote, *_testingStatus;
     NSDictionary *_kinds;               // id -> kind, from Russian/history.txt
+    RSDictionary *_dictionary;          // the bundled one, or one set for the shots
     BOOL _syncProblem, _testingProblem, _refreshing, _pushing, _watchChanged;
     time_t _checkedAt;
     NSTimer *_refreshTimer, *_dayTimer;
@@ -91,6 +93,7 @@ static NSString *RSTimeText(time_t t)
     [_reportNote release];
     [_testingStatus release];
     [_kinds release];
+    [_dictionary release];
     [super dealloc];
 }
 
@@ -483,6 +486,17 @@ static NSString *RSTimeText(time_t t)
 
 // ---- Playing ------------------------------------------------------------------------
 
+- (RSDictionary *)dictionary
+{
+    return _dictionary ?: [RSDictionary bundled];
+}
+
+- (void)setDictionary:(RSDictionary *)dictionary
+{
+    [_dictionary release];
+    _dictionary = [dictionary retain];
+}
+
 - (RSPlayer *)playVideo:(NSString *)identifier
 {
     RSVideo *video = [[_library current] videoWithIdentifier:identifier];
@@ -499,6 +513,7 @@ static NSString *RSTimeText(time_t t)
     [_player setDelegate:self];
     [_player setFelt:[_library feltFor:identifier] want:[_library wantFor:identifier]];
     [_player setKind:[video kind] firstViewing:![watch finished]];
+    [_player setDictionary:[self dictionary]];
     [_player show];
     return _player;
 }
@@ -548,6 +563,30 @@ static NSString *RSTimeText(time_t t)
     });
     [self reloadRows];
     return @"Kept. It comes back tomorrow (⌘L).";
+}
+
+- (NSString *)player:(RSPlayer *)player keepWord:(NSString *)word entry:(RSDictionaryEntry *)entry
+                line:(RSLine *)line before:(RSLine *)before
+{
+    NSString *identifier = [player identifier];
+    NSString *problem = nil;
+    RSKeptLine *kept = [_lines keepWord:word lemma:[entry accented] gloss:[entry gloss] rank:[entry rank]
+                                 inLine:[line text] before:[before text] video:identifier
+                                  title:[[[_library current] videoWithIdentifier:identifier] displayTitle]
+                                  start:[line start] end:[line end] today:RSToday() problem:&problem];
+    if (kept == nil) return problem;
+    [_lines save];
+    [_library countHelp:RSHelpKept for:identifier];
+    [_library save];
+    _watchChanged = YES;
+    // The line's sound, once: a kept line may have cut it already.
+    NSString *sound = [_lines soundPath:kept];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:sound])
+        RSCutClip([_library moviePath:identifier], [line start], [line end], sound, ^(BOOL ok, NSString *why) {
+            if (!ok) NSLog(@"Shelf: %@", why);
+        });
+    [self reloadRows];
+    return [NSString stringWithFormat:@"Kept “%@”. It comes back tomorrow (⌘L).", word];
 }
 
 - (void)playerClosed:(RSPlayer *)player
@@ -701,6 +740,7 @@ static NSString *RSKey(unichar c)
     RSItem(play, @"Loop This Line", @selector(loop:), @"l", 0, self);
     RSItem(play, @"Slower", @selector(slower:), @"-", 0, self);
     RSItem(play, @"Keep This Line", @selector(keep:), @"k", 0, self);
+    RSItem(play, @"A Word", @selector(word:), @"w", 0, self);
     [play addItem:[NSMenuItem separatorItem]];
     RSItem(play, @"How Was This Video?", @selector(feedback:), @"h", 0, self);
     [play addItem:[NSMenuItem separatorItem]];
@@ -738,6 +778,7 @@ static NSString *RSKey(unichar c)
     if (a == @selector(subtitles:)) [item setState:[_player subtitlesOn] ? NSOnState : NSOffState];
     if (a == @selector(transcript:)) [item setState:[_player transcriptShown] ? NSOnState : NSOffState];
     if (a == @selector(fullScreen:)) [item setState:[_player fullScreen] ? NSOnState : NSOffState];
+    if (a == @selector(word:)) [item setState:[_player wordSlipShown] ? NSOnState : NSOffState];
     return [self playerIsKey];
 }
 
@@ -753,6 +794,7 @@ static NSString *RSKey(unichar c)
 - (void)loop:(id)sender       { [_player toggleLoop]; }
 - (void)slower:(id)sender     { [_player toggleSlower]; }
 - (void)keep:(id)sender       { [_player keepLine]; }
+- (void)word:(id)sender       { [_player toggleWordSlip]; }
 - (void)feedback:(id)sender   { [_player toggleFeedback]; }
 
 @end

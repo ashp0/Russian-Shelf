@@ -327,6 +327,7 @@ static NSString *RSHelpKey(RSHelp kind)
         case RSHelpSlowed:      return @"slowed";
         case RSHelpTranscript:  return @"transcript";
         case RSHelpSubtitles:   return @"subtitles";
+        case RSHelpLookedUp:    return @"lookedUp";
         default:                return @"other";
     }
 }
@@ -341,6 +342,7 @@ NSString *RSHelpName(RSHelp kind)
         case RSHelpSlowed:      return @"slowed";
         case RSHelpTranscript:  return @"transcript";
         case RSHelpSubtitles:   return @"subtitles";
+        case RSHelpLookedUp:    return @"looked up";
         default:                return @"other";
     }
 }

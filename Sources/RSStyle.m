@@ -942,6 +942,107 @@ static NSArray *RSFeedbackLayout(NSRect panel, CGFloat *width)
     }
 }
 
+// ---- A word looked up ------------------------------------------------------------
+
+static const CGFloat RSSlipPad = 12, RSSlipWordHeight = 24, RSSlipWordGap = 6, RSSlipRowGap = 6, RSSlipBelow = 58;
+
+static NSDictionary *RSSlipWordText(void)
+{
+    return RSText(RSSerif(14), RSInk(), NSCenterTextAlignment, NSLineBreakByClipping);
+}
+
+// Lays the words out in rows across the slip's width; returns the rects (in
+// the slip's own coordinates, from its top) and the height used.
+static NSArray *RSSlipLayout(CGFloat width, NSArray *words, CGFloat *height)
+{
+    NSMutableArray *rects = [NSMutableArray array];
+    NSDictionary *a = RSSlipWordText();
+    CGFloat x = RSSlipPad, y = RSSlipPad;
+    for (NSString *w in words) {
+        CGFloat ww = ceil([w sizeWithAttributes:a].width) + 16;
+        if (x + ww > width - RSSlipPad && x > RSSlipPad) { x = RSSlipPad; y += RSSlipWordHeight + RSSlipRowGap; }
+        [rects addObject:[NSValue valueWithRect:NSMakeRect(x, y, ww, RSSlipWordHeight)]];
+        x += ww + RSSlipWordGap;
+    }
+    if (height) *height = y + RSSlipWordHeight + RSSlipBelow;
+    return rects;
+}
+
++ (NSSize)wordSlipSizeIn:(NSRect)videoRect words:(NSArray *)words
+{
+    CGFloat width = MIN(760, NSWidth(videoRect) - 40), height = 0;
+    RSSlipLayout(width, words, &height);
+    return NSMakeSize(width, height);
+}
+
++ (NSArray *)wordSlipItemRectsIn:(NSRect)slip words:(NSArray *)words
+{
+    NSMutableArray *rects = [NSMutableArray array];
+    BOOL flipped = RSFlipped();
+    for (NSValue *v in RSSlipLayout(NSWidth(slip), words, NULL)) {
+        NSRect r = [v rectValue];
+        r.origin.x += NSMinX(slip);
+        r.origin.y = flipped ? NSMinY(slip) + NSMinY(r) : NSMaxY(slip) - NSMinY(r) - NSHeight(r);
+        [rects addObject:[NSValue valueWithRect:r]];
+    }
+    return rects;
+}
+
++ (void)drawWordSlipIn:(NSRect)slip words:(NSArray *)words selected:(NSInteger)selected
+                 lemma:(NSString *)lemma detail:(NSString *)detail rank:(NSString *)rank note:(NSString *)note
+                 hover:(NSInteger)hover
+{
+    RSDrawCard(slip, 0, YES);
+    NSArray *rects = [self wordSlipItemRectsIn:slip words:words];
+    NSDictionary *a = RSSlipWordText();
+    for (NSUInteger i = 0; i < [rects count]; i++) {
+        NSRect r = [[rects objectAtIndex:i] rectValue];
+        BOOL chosen = (NSInteger)i == selected, lit = (NSInteger)i == hover;
+        NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:r xRadius:4 yRadius:4];
+        if (chosen) {
+            [NSGraphicsContext saveGraphicsState];
+            RSShadowOn(1, 3, 0.35);
+            [RSRGB(0xfffdf4, 1) set];
+            [p fill];
+            [NSGraphicsContext restoreGraphicsState];
+            [RSRGB(0x1f3f8a, 0.9) set];
+            [p setLineWidth:1.5];
+            [p stroke];
+        } else {
+            [RSRGB(0xffffff, lit ? 0.6 : 0.25) set];
+            [p fill];
+            [RSRGB(0xd9cba8, 1) set];
+            [p setLineWidth:1];
+            [p stroke];
+        }
+        NSRect t = NSInsetRect(r, 0, 3);
+        RSDrawText([words objectAtIndex:i], a, t);
+    }
+    // Under the words: the lemma, its kind and glosses, and the rank.
+    BOOL flipped = RSFlipped();
+    CGFloat belowTop = NSHeight(slip) - RSSlipBelow + 4;
+    NSRect l = NSMakeRect(NSMinX(slip) + RSSlipPad, flipped ? NSMinY(slip) + belowTop : NSMaxY(slip) - belowTop - 24,
+                          NSWidth(slip) - 2 * RSSlipPad, 24);
+    [RSRGB(0xe08a8a, 0.85) set];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(slip) + 1, flipped ? NSMinY(l) - 3 : NSMaxY(l) + 3, NSWidth(slip) - 2, 1), NSCompositeSourceOver);
+    if ([lemma length]) {
+        NSDictionary *lt = RSText(RSSerifBold(17), RSInk(), NSLeftTextAlignment, NSLineBreakByClipping);
+        CGFloat lw = ceil([lemma sizeWithAttributes:lt].width) + 10;
+        RSDrawText(lemma, lt, l);
+        NSDictionary *dt = RSText(RSSerif(13), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText(detail ?: @"", dt, NSMakeRect(NSMinX(l) + lw, NSMinY(l) + (flipped ? 4 : 2), NSWidth(l) - lw, 20));
+    } else {
+        NSDictionary *nt = RSText(RSSerifItalic(14), RSInkFaint(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText(note ?: @"Not in the dictionary.", nt, NSMakeRect(NSMinX(l), NSMinY(l) + 2, NSWidth(l), 20));
+    }
+    NSRect r2 = NSMakeRect(NSMinX(l), flipped ? NSMaxY(l) + 2 : NSMinY(l) - 20, NSWidth(l), 18);
+    NSDictionary *rt = RSText(RSSerifItalic(12), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+    NSString *hint = @"← → a word   K keep it   W close";
+    NSDictionary *ht = RSText(RSSerifItalic(11), RSInkFaint(), NSRightTextAlignment, NSLineBreakByClipping);
+    if ([rank length]) RSDrawText(rank, rt, NSMakeRect(NSMinX(r2), NSMinY(r2), NSWidth(r2) - 220, 18));
+    RSDrawText(hint, ht, NSMakeRect(NSMaxX(r2) - 220, NSMinY(r2) + 1, 220, 16));
+}
+
 // ---- The transcript ---------------------------------------------------------
 //
 // A sheet of ruled exercise paper: a blue rule under each line, the time in
@@ -1043,8 +1144,8 @@ static NSRect RSReviewCard(NSRect rect)
 }
 
 + (void)drawReviewIn:(NSRect)rect heading:(NSString *)heading source:(NSString *)source before:(NSString *)before
-                text:(NSString *)text prompt:(NSString *)prompt message:(NSString *)message note:(NSString *)note
-          meaningRow:(BOOL)meaningRow keys:(NSArray *)keys
+                text:(NSString *)text word:(NSString *)word detail:(NSString *)detail prompt:(NSString *)prompt
+             message:(NSString *)message note:(NSString *)note meaningRow:(BOOL)meaningRow keys:(NSArray *)keys
 {
     CGFloat bar = [self hintBarHeight];
     NSRect wall = rect;
@@ -1098,8 +1199,25 @@ static NSRect RSReviewCard(NSRect rect)
         RSDrawText(prompt, t, NSMakeRect(NSMinX(body), round(NSMidY(body) - th / 2), width, th));
     } else if ([text length]) {
         NSDictionary *t = RSText(RSSerif(24), RSInk(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
-        CGFloat th = MIN(NSHeight(body), RSHeightOf(text, t, width));
-        RSDrawText(text, t, NSMakeRect(NSMinX(body), round(NSMidY(body) - th / 2), width, th));
+        CGFloat dh = [detail length] ? 22 : 0;
+        CGFloat th = MIN(NSHeight(body) - dh, RSHeightOf(text, t, width));
+        NSRect tr = NSMakeRect(NSMinX(body), round(NSMidY(body) - (th + dh) / 2) + dh, width, th);
+        if ([word length]) {
+            // The word underlined in blue ink, as a reader marks a word to look up.
+            NSMutableAttributedString *marked = [[[NSMutableAttributedString alloc] initWithString:text attributes:t] autorelease];
+            NSRange range = [text rangeOfString:word options:NSCaseInsensitiveSearch];
+            if (range.location != NSNotFound) {
+                [marked addAttribute:NSUnderlineStyleAttributeName value:[NSNumber numberWithInt:NSUnderlineStyleSingle] range:range];
+                [marked addAttribute:NSUnderlineColorAttributeName value:RSRGB(0x1f3f8a, 1) range:range];
+            }
+            [marked drawWithRect:tr options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingTruncatesLastVisibleLine];
+        } else {
+            RSDrawText(text, t, tr);
+        }
+        if (dh) {
+            NSDictionary *d = RSText(RSSerifItalic(13), RSInkSoft(), NSCenterTextAlignment, NSLineBreakByTruncatingTail);
+            RSDrawText(detail, d, NSMakeRect(NSMinX(body), NSMinY(tr) - dh, width, 18));
+        }
     } else if ([message length]) {
         NSDictionary *m = RSText(RSSerif(15), RSInkSoft(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
         CGFloat mh = MIN(NSHeight(body), RSHeightOf(message, m, width - 40));

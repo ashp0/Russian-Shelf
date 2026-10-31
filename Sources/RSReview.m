@@ -347,10 +347,17 @@ static const float RSReviewSlowerRate = 0.75;
 {
     NSString *heading = nil, *source = nil, *before = nil, *text = nil, *prompt = nil, *message = nil;
     NSArray *keys = nil;
+    BOOL word = [_line isWord];
+    NSString *mark = nil, *detail = nil;
+    if (word && _state == RSReviewShown) {
+        mark = [_line word];
+        detail = [NSString stringWithFormat:@"%@ · %@", [_line lemma] ?: [_line word], [_line gloss] ?: @""];
+    }
     switch (_state) {
         case RSReviewListening:
         case RSReviewShown:
-            heading = _state == RSReviewListening ? @"Listen. What does it say?" : @"Now say it aloud.";
+            heading = _state == RSReviewListening ? (word ? @"Listen. Which word was it, and what does it mean?" : @"Listen. What does it say?")
+                                                  : (word ? @"The word, in its line. Say the line aloud." : @"Now say it aloud.");
             if ([[_line title] length])
                 source = [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
             if (_state == RSReviewShown) {
@@ -362,7 +369,7 @@ static const float RSReviewSlowerRate = 0.75;
                     @"←", @"Not yet", @"→", @"Knew it", @"⌫", @"Put away", nil];
             break;
         case RSReviewSaying:
-            heading = @"Say it in Russian.";
+            heading = word ? @"Say the word in Russian, then the line." : @"Say it in Russian.";
             if ([[_line title] length])
                 source = [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
             prompt = [_line meaning];
@@ -376,7 +383,7 @@ static const float RSReviewSlowerRate = 0.75;
             break;
         case RSReviewNothingKept:
             heading = @"No lines kept yet.";
-            message = @"While a video plays, K keeps the line just said, with its sound. It comes back here the next day.";
+            message = @"While a video plays, K keeps the line just said, with its sound, and W looks a word up to keep. They come back here the next day.";
             keys = [NSArray arrayWithObjects:@"Esc", @"Close", nil];
             break;
     }
@@ -386,8 +393,8 @@ static const float RSReviewSlowerRate = 0.75;
         [items addObject:[keys objectAtIndex:i]];
         [items addObject:[keys objectAtIndex:i + 1]];
     }
-    [RSStyle drawReviewIn:rect heading:heading source:source before:before text:text prompt:prompt message:message
-                     note:_note meaningRow:_state == RSReviewShown keys:items];
+    [RSStyle drawReviewIn:rect heading:heading source:source before:before text:text word:mark detail:detail prompt:prompt
+                  message:message note:_note meaningRow:_state == RSReviewShown keys:items];
 }
 
 @end

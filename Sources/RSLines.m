@@ -7,6 +7,7 @@ const NSUInteger RSWaitingBrake = 45;
 const NSUInteger RSPutAwayAfter = 6;
 
 static NSString *const RSLinesFile = @"Lines.plist";
+NSString *const RSCardLine = @"line", *const RSCardWord = @"word";
 
 long RSLineGap(NSUInteger step)
 {
@@ -24,7 +25,16 @@ long RSLineGap(NSUInteger step)
     [_text release];
     [_before release];
     [_meaning release];
+    [_kind release];
+    [_word release];
+    [_lemma release];
+    [_gloss release];
     [super dealloc];
+}
+
+- (BOOL)isWord
+{
+    return [_kind isEqualToString:RSCardWord];
 }
 
 - (NSDictionary *)plist
@@ -38,6 +48,13 @@ long RSLineGap(NSUInteger step)
         [NSNumber numberWithLong:_heard], @"heard", [NSNumber numberWithBool:_knewLast], @"knewLast", nil];
     if (_before) [d setObject:_before forKey:@"before"];
     if ([_meaning length]) [d setObject:_meaning forKey:@"meaning"];
+    if ([self isWord]) {
+        [d setObject:RSCardWord forKey:@"kind"];
+        [d setObject:_word ?: @"" forKey:@"word"];
+        [d setObject:_lemma ?: @"" forKey:@"lemma"];
+        [d setObject:_gloss ?: @"" forKey:@"gloss"];
+        [d setObject:[NSNumber numberWithUnsignedInteger:_rank] forKey:@"rank"];
+    }
     return d;
 }
 
@@ -54,6 +71,13 @@ long RSLineGap(NSUInteger step)
     if ([[d objectForKey:@"title"] isKindOfClass:[NSString class]]) [line setTitle:[d objectForKey:@"title"]];
     if ([[d objectForKey:@"before"] isKindOfClass:[NSString class]]) [line setBefore:[d objectForKey:@"before"]];
     if ([[d objectForKey:@"meaning"] isKindOfClass:[NSString class]]) [line setMeaning:[d objectForKey:@"meaning"]];
+    if ([[d objectForKey:@"kind"] isEqualToString:RSCardWord]) {
+        [line setKind:RSCardWord];
+        if ([[d objectForKey:@"word"] isKindOfClass:[NSString class]]) [line setWord:[d objectForKey:@"word"]];
+        if ([[d objectForKey:@"lemma"] isKindOfClass:[NSString class]]) [line setLemma:[d objectForKey:@"lemma"]];
+        if ([[d objectForKey:@"gloss"] isKindOfClass:[NSString class]]) [line setGloss:[d objectForKey:@"gloss"]];
+        [line setRank:[[d objectForKey:@"rank"] unsignedIntegerValue]];
+    }
     [line setStart:[[d objectForKey:@"start"] doubleValue]];
     [line setEnd:[[d objectForKey:@"end"] doubleValue]];
     [line setKept:[[d objectForKey:@"kept"] longValue]];
@@ -140,16 +164,23 @@ static NSString *RSLineKey(NSString *video, double start)
     return n;
 }
 
+// Why nothing more can be kept today, or nil.
+- (NSString *)brakeOn:(long)today
+{
+    if ([self keptOn:today] >= RSKeepPerDay)
+        return [NSString stringWithFormat:@"%lu kept today: that’s plenty. More tomorrow.", (unsigned long)RSKeepPerDay];
+    if ([self waitingOn:today] >= RSWaitingBrake)
+        return [NSString stringWithFormat:@"%lu cards are waiting to be heard again (⌘L). Those first.", (unsigned long)[self waitingOn:today]];
+    return nil;
+}
+
 - (RSKeptLine *)keepText:(NSString *)text before:(NSString *)before video:(NSString *)video title:(NSString *)title
                    start:(double)start end:(double)end today:(long)today problem:(NSString **)problem
 {
     NSString *why = nil;
     if ([text length] == 0 || [video length] == 0) why = @"There’s no line here to keep.";
     else if ([self isKept:video start:start]) why = @"This line is kept already.";
-    else if ([self keptOn:today] >= RSKeepPerDay)
-        why = [NSString stringWithFormat:@"%lu lines kept today: that’s plenty. More tomorrow.", (unsigned long)RSKeepPerDay];
-    else if ([self waitingOn:today] >= RSWaitingBrake)
-        why = [NSString stringWithFormat:@"%lu lines are waiting to be heard again (⌘L). Those first.", (unsigned long)[self waitingOn:today]];
+    else why = [self brakeOn:today];
     if (why) {
         if (problem) *problem = why;
         return nil;
@@ -166,6 +197,51 @@ static NSString *RSLineKey(NSString *video, double start)
     [line setDue:today + RSLineGap(0)];
     [_lines addObject:line];
     return line;
+}
+
+static NSString *RSWordKey(NSString *video, double start, NSString *word)
+{
+    return [NSString stringWithFormat:@"%@-%@", RSLineKey(video, start), [word lowercaseString]];
+}
+
+- (BOOL)isKeptWord:(NSString *)word video:(NSString *)video start:(double)start
+{
+    NSString *key = RSWordKey(video, start, word);
+    for (RSKeptLine *line in _lines)
+        if ([[line key] isEqualToString:key]) return YES;
+    return NO;
+}
+
+- (RSKeptLine *)keepWord:(NSString *)word lemma:(NSString *)lemma gloss:(NSString *)gloss rank:(NSUInteger)rank
+                  inLine:(NSString *)text before:(NSString *)before video:(NSString *)video title:(NSString *)title
+                   start:(double)start end:(double)end today:(long)today problem:(NSString **)problem
+{
+    NSString *why = nil;
+    if ([word length] == 0 || [text length] == 0 || [video length] == 0) why = @"There’s no word here to keep.";
+    else if ([self isKeptWord:word video:video start:start]) why = @"This word is kept already.";
+    else why = [self brakeOn:today];
+    if (why) {
+        if (problem) *problem = why;
+        return nil;
+    }
+    RSKeptLine *card = [[[RSKeptLine alloc] init] autorelease];
+    [card setKey:RSWordKey(video, start, word)];
+    [card setKind:RSCardWord];
+    [card setWord:word];
+    [card setLemma:lemma];
+    [card setGloss:gloss];
+    [card setRank:rank];
+    [card setMeaning:[gloss length] ? gloss : nil];      // the gloss is its meaning, until the owner writes their own
+    [card setVideo:video];
+    [card setTitle:title];
+    [card setText:text];
+    [card setBefore:[before length] ? before : nil];
+    [card setStart:start];
+    [card setEnd:MAX(start, end)];
+    [card setKept:today];
+    [card setDue:today + RSLineGap(0)];
+    [_lines addObject:card];
+    return card;
 }
 
 - (NSUInteger)heardOn:(long)today
@@ -237,7 +313,8 @@ static NSString *RSLineKey(NSString *video, double start)
 
 - (NSString *)soundPath:(RSKeptLine *)line
 {
-    return [_folder stringByAppendingPathComponent:[[line key] stringByAppendingPathExtension:@"m4a"]];
+    NSString *key = [line isWord] ? RSLineKey([line video], [line start]) : [line key];
+    return [_folder stringByAppendingPathComponent:[key stringByAppendingPathExtension:@"m4a"]];
 }
 
 - (NSArray *)linesFromVideo:(NSString *)video

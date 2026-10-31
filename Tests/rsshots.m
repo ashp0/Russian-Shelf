@@ -20,6 +20,7 @@
 #import "RSLines.h"
 #import "RSDate.h"
 #import "RSClip.h"
+#import "RSDictionary.h"
 
 static const char *KeyPrivate =
     "-----BEGIN EC PRIVATE KEY-----\n"
@@ -189,6 +190,7 @@ int main(int argc, const char *argv[])
         [library save];
 
         RSController *c = [[[RSController alloc] initWithLibrary:library studyFolder:@"/nonexistent/Study"] autorelease];
+        [c setDictionary:[[[RSDictionary alloc] initWithFile:[fixtures stringByAppendingPathComponent:@"dict.sqlite"]] autorelease]];
         [c showWindow];
         [[c window] orderOut:nil];
         [[c window] setContentSize:[RSStyle shelfWindowSize]];
@@ -242,6 +244,15 @@ int main(int argc, const char *argv[])
         [player keepLine];
         printf("  kept     %s\n", [[player visibleNote] UTF8String]);
         ShootBoth([player window], out, @"player-keep");
+        // A word looked up: the slip over the picture, the rarest word chosen.
+        Spin(2.6);      // let the "Kept." note pass
+        [player toggleWordSlip];
+        [player chooseSlipWord:1];      // "что": a word the fixture dictionary knows
+        printf("  word     slip %s, word %ld\n", [player wordSlipShown] ? "shown" : "hidden", (long)[player slipSelection]);
+        ShootBoth([player window], out, @"player-word");
+        [player keepSlipWord];
+        printf("  kept     %s\n", [[player visibleNote] UTF8String]);
+        [player toggleWordSlip];
         // The desk card the next day: a card to hear again, then the story.
         setenv("RUSSIAN_SHELF_NOW", "2026-10-15 20:30", 1);
         [c reloadRows];
@@ -324,6 +335,21 @@ int main(int argc, const char *argv[])
         [say showLine];
         ShootBoth([say window], out, @"lines-say-shown");
         [say close];
+        // A word card: the line's sound, then the word underlined in its line.
+        RSKeptLine *wordCard = [lines keepWord:@"волосы" lemma:@"во\u0301лосы" gloss:@"hair" rank:1840
+                                        inLine:@"Она отрезала волосы, чтобы спасти мужа." before:@"И тогда она решила."
+                                         video:@"JE4cI_Knzvc" title:[NSString stringWithUTF8String:Videos[0][2]] start:250 end:253
+                                         today:RSToday() - 1 problem:NULL];
+        [first setDue:RSToday() + 3];
+        [wordCard setDue:RSToday()];
+        [lines save];
+        RSReview *wordReview = [[[RSReview alloc] initWithLines:lines today:RSToday()] autorelease];
+        [wordReview setSilentForTesting];
+        [[wordReview window] orderOut:nil];
+        printf("  word     state %d\n", (int)[wordReview state]);
+        [wordReview showLine];
+        ShootBoth([wordReview window], out, @"lines-word");
+        [wordReview close];
         [c reloadRows];
         ShootBoth([c window], out, @"shelf-after-lines");
 

@@ -70,10 +70,10 @@ NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_
     }
     // The order the Help columns come in.
     static const RSHelp order[] = { RSHelpShown, RSHelpHeardAgain, RSHelpLooped, RSHelpSlowed, RSHelpTranscript,
-                                    RSHelpSubtitles, RSHelpKept };
+                                    RSHelpSubtitles, RSHelpLookedUp, RSHelpKept };
     const size_t kinds = sizeof order / sizeof order[0];
     NSMutableString *help = [NSMutableString string], *felt = [NSMutableString string],
-                    *asked = [NSMutableString string], *kept = [NSMutableString string];
+                    *asked = [NSMutableString string], *kept = [NSMutableString string], *words = [NSMutableString string];
     for (RSVideo *video in [shelf videos]) {
         NSString *identifier = [video identifier];
         NSMutableString *row = [NSMutableString stringWithString:identifier];
@@ -105,15 +105,21 @@ NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_
         }
 
         for (RSKeptLine *line in [lines linesFromVideo:identifier]) {
+            if ([line isWord]) {
+                [words appendFormat:@"%@ | %@ | %@ (%@) | %@ | in: %@\n", identifier, RSClock([line start]), [line word],
+                 [line lemma] ?: @"", RSOneLine([line gloss] ?: @""), RSOneLine([line text])];
+                continue;
+            }
             [kept appendFormat:@"%@ | %@ | %@", identifier, RSClock([line start]), RSOneLine([line text])];
             if ([[line meaning] length]) [kept appendFormat:@" | means: %@", RSOneLine([line meaning])];
             [kept appendString:@"\n"];
         }
     }
     if ([help length])
-        [s appendFormat:@"\nHelp (shown, heard again, looped, slowed, transcript, subtitles, kept):\n%@", help];
+        [s appendFormat:@"\nHelp (shown, heard again, looped, slowed, transcript, subtitles, looked up, kept):\n%@", help];
     if ([felt length]) [s appendFormat:@"\nHow it felt (the owner's own choice, about the video):\n%@", felt];
     if ([asked length]) [s appendFormat:@"\nLines help was asked on:\n%@", asked];
     if ([kept length]) [s appendFormat:@"\nKept:\n%@", kept];
+    if ([words length]) [s appendFormat:@"\nWords kept (word (lemma) | gloss | the line):\n%@", words];
     return s;
 }

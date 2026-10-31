@@ -33,8 +33,16 @@ extern const NSUInteger RSHearPerDay;          // 60
 extern const NSUInteger RSWaitingBrake;        // 45 waiting: keep no more
 extern const NSUInteger RSPutAwayAfter;        // 6 times "not yet"
 
+extern NSString *const RSCardLine, *const RSCardWord;
+
 @interface RSKeptLine : NSObject
-@property (nonatomic, copy) NSString *key;              // also the sound's file name
+@property (nonatomic, copy) NSString *key;              // a line: "<video>-<ms>", also its sound's file name
+@property (nonatomic, copy) NSString *kind;             // RSCardLine (nil counts as a line) or RSCardWord
+// A word card: the word as it stands in the line, its lemma with the stress
+// marked, its gloss, and its rank (0: none). Its sound is the line's.
+@property (nonatomic, copy) NSString *word, *lemma, *gloss;
+@property (nonatomic) NSUInteger rank;
+- (BOOL)isWord;
 @property (nonatomic, copy) NSString *video, *title;    // the video's id and title
 @property (nonatomic) double start, end;                // where it is in the video (seconds)
 @property (nonatomic, copy) NSString *text;             // the line (may hold a line break)
@@ -58,6 +66,12 @@ extern const NSUInteger RSPutAwayAfter;        // 6 times "not yet"
 - (RSKeptLine *)keepText:(NSString *)text before:(NSString *)before video:(NSString *)video title:(NSString *)title
                    start:(double)start end:(double)end today:(long)today problem:(NSString **)problem;
 - (BOOL)isKept:(NSString *)video start:(double)start;
+// Keeps a word from a line (the line's text and sound go with it). nil with
+// *problem as for a line; a word is kept once per line.
+- (RSKeptLine *)keepWord:(NSString *)word lemma:(NSString *)lemma gloss:(NSString *)gloss rank:(NSUInteger)rank
+                  inLine:(NSString *)text before:(NSString *)before video:(NSString *)video title:(NSString *)title
+                   start:(double)start end:(double)end today:(long)today problem:(NSString **)problem;
+- (BOOL)isKeptWord:(NSString *)word video:(NSString *)video start:(double)start;
 - (NSUInteger)keptOn:(long)today;
 
 // Today's lines to hear again: those due by today, oldest due first, as
@@ -76,7 +90,7 @@ extern const NSUInteger RSPutAwayAfter;        // 6 times "not yet"
 // Put a line away by hand.
 - (void)putAway:(RSKeptLine *)line;
 
-- (NSString *)soundPath:(RSKeptLine *)line;     // Lines/<key>.m4a (may not exist)
+- (NSString *)soundPath:(RSKeptLine *)line;     // Lines/<key>.m4a, a word card's its line's (may not exist)
 - (NSArray *)linesFromVideo:(NSString *)video;
 
 - (BOOL)save;

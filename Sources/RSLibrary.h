@@ -56,6 +56,7 @@ typedef enum {
     RSHelpSlowed,
     RSHelpTranscript,
     RSHelpSubtitles,
+    RSHelpLookedUp,             // a word looked up in the dictionary (W)
     RSHelpKinds                 // how many kinds there are
 } RSHelp;
 

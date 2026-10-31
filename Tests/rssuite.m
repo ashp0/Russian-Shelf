@@ -24,6 +24,7 @@
 #import "RSDate.h"
 #import "RSLines.h"
 #import "RSClip.h"
+#import "RSDictionary.h"
 
 static int failures = 0, checks = 0;
 
@@ -701,9 +702,14 @@ static void TestReports(void)
     RSKeptLine *withMeaning = [lines keepText:@"Она отрезала\nволосы." before:nil video:Id(2) title:@"Story" start:250.4 end:252 today:100 problem:NULL];
     [withMeaning setMeaning:@"She cut\nher hair."];
     [lines keepText:@"Elsewhere." before:nil video:@"notonshelf1" title:@"Other" start:5 end:6 today:100 problem:NULL];
+    [lines keepWord:@"отрезала" lemma:@"отре\u0301зать" gloss:@"cut off" rank:4100 inLine:@"Она отрезала\nволосы." before:nil video:Id(2)
+             title:@"Story" start:250.4 end:252 today:100 problem:NULL];
     text = RSReportText([library current], library, lines, when);
-    NSString *helpLine = [NSString stringWithFormat:@"\nHelp (shown, heard again, looped, slowed, transcript, subtitles, kept):\n"
-                          "%@ | shown 2 | heard again 1 | looped 1 | slowed 1 | transcript 1 | subtitles 1 | kept 1\n", Id(2)];
+    CHECK(Has(text, [NSString stringWithFormat:@"\nWords kept (word (lemma) | gloss | the line):\n%@ | 4:10 | отрезала (отре\u0301зать) | cut off | in: Она отрезала / волосы.\n", Id(2)]),
+          "words kept section:\n%s", [text UTF8String]);
+    CHECK(!Has(text, @"| отрезала (отре\u0301зать) | cut off | means:"), "a word card isn't listed among the lines");
+    NSString *helpLine = [NSString stringWithFormat:@"\nHelp (shown, heard again, looped, slowed, transcript, subtitles, looked up, kept):\n"
+                          "%@ | shown 2 | heard again 1 | looped 1 | slowed 1 | transcript 1 | subtitles 1 | looked up 0 | kept 1\n", Id(2)];
     CHECK(Has(text, helpLine), "help section:\n%s", [text UTF8String]);
     NSString *askedLines = [NSString stringWithFormat:@"\nLines help was asked on:\n%@ | 0:12 | looped 1, slowed 1, subtitles 1 | Потом она ушла.\n"
                             "%@ | 4:10 | shown 1, heard again 1 | Она отрезала / волосы.\n", Id(2), Id(2)];
@@ -791,7 +797,7 @@ static void TestLines(void)
     }
     CHECK([lines keptOn:day] == RSKeepPerDay, "fifteen today");
     CHECK([lines keepText:@"Sixteen" before:nil video:@"JE4cI_Knzvc" title:@"t" start:200 end:201 today:day problem:&problem] == nil &&
-          Has(problem, @"15 lines kept today"), "the sixteenth waits for tomorrow: %s", [problem UTF8String]);
+          Has(problem, @"15 kept today"), "the sixteenth waits for tomorrow: %s", [problem UTF8String]);
     RSKeptLine *b = [lines keepText:@"Tomorrow's" before:nil video:@"abcdefghijk" title:@"t" start:200 end:201 today:day + 1 problem:NULL];
     CHECK(b != nil, "and tomorrow it's kept");
 
@@ -859,9 +865,38 @@ static void TestLines(void)
     CHECK([today count] == 60 && [[[today objectAtIndex:0] text] isEqualToString:@"L0"], "sixty at most: %lu", (unsigned long)[today count]);
     CHECK([m waitingOn:day] == 70, "seventy waiting");
     CHECK([m keepText:@"More" before:nil video:@"vid" title:@"t" start:500 end:501 today:day problem:&problem] == nil &&
-          Has(problem, @"70 lines are waiting"), "no keeping while 45 or more wait: %s", [problem UTF8String]);
+          Has(problem, @"70 cards are waiting"), "no keeping while 45 or more wait: %s", [problem UTF8String]);
     for (int i = 0; i < 30; i++) [m answer:[today objectAtIndex:i] knew:YES today:day];
     [m save];
+
+    // Word cards: a word of a line, with the line and its sound.
+    NSString *wfolder = Temp(@"words");
+    [[NSFileManager defaultManager] removeItemAtPath:wfolder error:NULL];
+    RSLines *ws = [[[RSLines alloc] initWithFolder:wfolder] autorelease];
+    RSKeptLine *wc = [ws keepWord:@"волосы" lemma:@"во\u0301лосы" gloss:@"hair" rank:1840 inLine:@"Она отрезала волосы." before:@"Потом"
+                           video:@"JE4cI_Knzvc" title:@"t" start:250.4 end:252 today:day problem:&problem];
+    CHECK(wc && [wc isWord] && [[wc key] isEqualToString:@"JE4cI_Knzvc-0000250400-волосы"] && [[wc word] isEqualToString:@"волосы"] &&
+          [[wc text] isEqualToString:@"Она отрезала волосы."] && [wc rank] == 1840 && [[wc meaning] isEqualToString:@"hair"],
+          "a word is kept with its line, the gloss as its meaning (%s)", [problem UTF8String]);
+    CHECK([ws isKeptWord:@"Волосы" video:@"JE4cI_Knzvc" start:250.4] && ![ws isKeptWord:@"она" video:@"JE4cI_Knzvc" start:250.4],
+          "kept once per line, whatever the case");
+    CHECK([ws keepWord:@"волосы" lemma:nil gloss:nil rank:0 inLine:@"Она отрезала волосы." before:nil video:@"JE4cI_Knzvc" title:@"t"
+                start:250.4 end:252 today:day problem:&problem] == nil && Has(problem, @"kept already"), "the same word again: %s", [problem UTF8String]);
+    RSKeptLine *lc = [ws keepText:@"Она отрезала волосы." before:nil video:@"JE4cI_Knzvc" title:@"t" start:250.4 end:252 today:day problem:&problem];
+    CHECK(lc && ![lc isWord] && [[ws soundPath:wc] isEqualToString:[ws soundPath:lc]], "a word's sound is its line's: %s", [[ws soundPath:wc] UTF8String]);
+    CHECK([ws keptOn:day] == 2 && [[ws dueOn:day + 1] count] == 2, "both count towards the day and come back tomorrow");
+    CHECK(![ws asksToSay:wc], "first, it's heard");
+    [ws answer:wc knew:YES today:day + 1];
+    CHECK([ws asksToSay:wc], "then said from its gloss");
+    RSKeptLine *unknown = [ws keepWord:@"xyzzy" lemma:nil gloss:nil rank:0 inLine:@"xyzzy there" before:nil video:@"JE4cI_Knzvc" title:@"t"
+                                start:300 end:301 today:day problem:&problem];
+    CHECK(unknown && [unknown meaning] == nil && ![ws asksToSay:unknown], "a word the dictionary doesn't know is kept without a meaning");
+    [ws save];
+    RSLines *ws2 = [[[RSLines alloc] initWithFolder:wfolder] autorelease];
+    RSKeptLine *back = nil;
+    for (RSKeptLine *l in [ws2 lines]) if ([[l key] isEqualToString:[wc key]]) back = l;
+    CHECK(back && [back isWord] && [[back lemma] isEqualToString:@"во\u0301лосы"] && [[back gloss] isEqualToString:@"hair"] && [back rank] == 1840 &&
+          [[back word] isEqualToString:@"волосы"] && [back step] == 1, "a word card reads back whole");
     RSLines *m2 = [[[RSLines alloc] initWithFolder:many] autorelease];
     CHECK([[m2 dueOn:day] count] == 30, "after thirty heard, thirty more today (also after a reload): %lu", (unsigned long)[[m2 dueOn:day] count]);
     CHECK([[m2 dueOn:day + 1] count] == 40, "the next day the rest are due: %lu", (unsigned long)[[m2 dueOn:day + 1] count]);
@@ -895,6 +930,43 @@ static void TestLines(void)
     [bad writeToFile:[damaged stringByAppendingPathComponent:@"Lines.plist"] atomically:YES];
     RSLines *dl = [[[RSLines alloc] initWithFolder:damaged] autorelease];
     CHECK([[dl lines] count] == 1 && [[[[dl lines] objectAtIndex:0] text] isEqualToString:@"Hi"], "damaged entries skipped");
+}
+
+// ---- The dictionary -----------------------------------------------------------
+
+static void TestDictionary(NSString *fixtures)
+{
+    RSDictionary *d = [[[RSDictionary alloc] initWithFile:[fixtures stringByAppendingPathComponent:@"dict.sqlite"]] autorelease];
+    CHECK(d != nil && [d wordCount] == 160, "the fixture dictionary opens: %lu words", (unsigned long)[d wordCount]);
+    CHECK([[[RSDictionary alloc] initWithFile:@"/nonexistent/dict.sqlite"] autorelease] == nil, "no file, no dictionary");
+    RSDictionaryEntry *e = [d lookup:@"Людей,"];
+    CHECK(e && [[e bare] isEqualToString:@"человек"] && [[e type] isEqualToString:@"noun"] && [e rank] > 0 &&
+          [[e accented] isEqualToString:@"челове\u0301к"] && Has([e gloss], @"person"),
+          "a form, with its case and comma, finds its lemma with the stress marked: %s %lu", [[e accented] UTF8String], (unsigned long)[e rank]);
+    CHECK([[[d lookup:@"скажу"] bare] isEqualToString:@"сказать"] && [[[d lookup:@"СКАЗАЛА"] bare] isEqualToString:@"сказать"], "verb forms");
+    CHECK([[[d lookup:@"тем"] bare] isEqualToString:@"тот"], "a form shared by lemmas goes to the most frequent");
+    CHECK([d lookup:@"xyz"] == nil && [d lookup:@""] == nil && [d lookup:@"..."] == nil, "unknown words: nil");
+    RSDictionaryEntry *yo = [d lookup:@"идёт"], *ye = [d lookup:@"идет"];
+    CHECK(yo && ye && [[yo bare] isEqualToString:@"идти"] && [[ye bare] isEqualToString:@"идти"], "ё and е both find the word");
+    CHECK([[[d lookup:@"мне"] bare] isEqualToString:@"я"] && [[[d lookup:@"её"] bare] isEqualToString:@"она"], "pronoun cases");
+
+    RSDictionaryEntry *r = [[[RSDictionaryEntry alloc] init] autorelease];
+    [r setRank:1840];
+    CHECK([[r rankText] isEqualToString:@"common: 1,840th"], "rank text: %s", [[r rankText] UTF8String]);
+    [r setRank:6201];
+    CHECK([[r rankText] isEqualToString:@"less common: 6,201st"], "rank text: %s", [[r rankText] UTF8String]);
+    [r setRank:0];
+    CHECK([[r rankText] isEqualToString:@"rare: past the common 10,000"], "rank text: %s", [[r rankText] UTF8String]);
+    [r setRank:12000];
+    CHECK([[r rankText] isEqualToString:@"rare: past the common 10,000"], "rank text past the band: %s", [[r rankText] UTF8String]);
+    [r setRank:3];
+    CHECK([[r rankText] isEqualToString:@"common: 3rd"] , "rank text: %s", [[r rankText] UTF8String]);
+
+    NSArray *words = RSWordsInLine(@"«Это я, ваша мама-коза пришла!» — кто-то (сказал) 2 раза.");
+    NSArray *expect = [NSArray arrayWithObjects:@"Это", @"я", @"ваша", @"мама-коза", @"пришла", @"кто-то", @"сказал", @"раза", nil];
+    CHECK([words isEqualToArray:expect], "the words of a line: %s", [[words componentsJoinedByString:@" "] UTF8String]);
+    CHECK([RSWordsInLine(@"Hello there 123") count] == 0, "no Cyrillic, no words");
+    CHECK([RSStressMarked(@"челове'к") isEqualToString:@"челове\u0301к"], "the stress mark");
 }
 
 // ---- Cutting a line's sound ------------------------------------------------
@@ -1090,6 +1162,7 @@ int main(int argc, const char *argv[])
         TestSubtitles(fixtures);
         TestLibrary();
         TestLines();
+        TestDictionary(fixtures);
         TestClip();
         TestCommandLines();
         TestReports();
