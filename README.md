@@ -1,3 +1,41 @@
+# Shelf
+
+A walnut bookcase of about twelve Russian videos for the week, chosen by
+Claude, on the Mac Pro (OS X 10.9), and the desk around them: a card that says
+what today holds, a dictionary for any word in a line, a daily clip worked in
+three passes, cards to hear again on spaced days, and a speaking practice with
+the microphone. Russian Shelf until 2026-10-30; `DESIGN.md` is why it changed
+(the research is in the Russian Fluency Brief of 2026-10-30 and
+`dendron-autopilot/reports/r1-research.md`).
+
+It looks like a 2013 Mac app: the bookcase with a brass nameplate, each video
+standing on its own plank beside a cream library card, a red silk ribbon on
+the one to watch next and a green ПРОСМОТРЕНО stamp on the ones you've
+finished; brass plates over each group of videos; ruled index cards for the
+rest. Everything is drawn in `Sources/RSStyle.m` (the wood too), and the icon,
+a small bookcase of white, blue and red books, in `Tools/mkicon.m`.
+
+There is nothing to browse in it: no search, no URL field, no File > Open, no
+dragging a file in, no recommendations, no "up next". Claude writes the week's
+list on the MacBook, seals it, and the app shows it. Nothing is counted,
+scored or kept in a row: the only numbers on screen are how many cards wait
+and facts about words.
+
+The spine is [Sergey Storyteller](https://www.youtube.com/@SergeyStoryteller):
+stories in easy Russian, made for learners, with one or two fast native
+videos a week (Easy Russian's street interviews) to work line by line.
+
+## Four things, in order
+
+The research (DESIGN.md) says a learner needs four kinds of time, and that an
+intermediate stalls when the easy one crowds out the others:
+
+1. **Listening you understand**, most of the time: the bookcase, in kinds.
+2. **A short deliberate slice**, ten to fifteen minutes: today's **Clip**, the
+   dictionary (**W**), and the **Cards**.
+3. **Speaking as a skill**, which only speaking builds: **Say**.
+4. **Habit, not willpower**: the **desk card**, which removes the decision.
+
 # Russian Shelf
 
 A shelf of about twelve Russian videos for the week, chosen by Claude, on the
@@ -44,13 +82,35 @@ publish it, and don't push it anywhere public.
 
 ## Using it
 
-The shelf window lists the week in Claude's order: thumbnail, title, channel,
-length, and how far you've got (the furthest point you reached by playing).
-The next one to watch has a blue bar and **NEXT**. Videos still downloading
-show their progress; one that failed says why and is tried again within the
-hour.
+### The bookcase and the desk card
+
+The shelf window shows the week in three groups, each under a small brass
+plate: **Easy stories**, **Natural speech**, **Fast speech** (the list's kinds,
+from the `# kind:` lines Claude writes, or history.txt, or a guess from the
+channel and title). In each group, Claude's order: thumbnail, title, channel,
+length, how far you've got. The next one to watch has the ribbon and **NEXT**.
+Videos still downloading show their progress; one that failed says why and is
+tried again within the hour.
+
+Under the nameplate, a cream card says what today holds, in the research's
+order, one line each, each a click away:
+
+```
+Today
+Cards        7 to hear again                         ⌘L
+Clip         What Are You Doing Today?, 2:10–4:40     ⌘K
+Say          «Мой университет», 2·1½·1                ⌘S
+Then watch   Теремок                                 Return
+```
+
+A line is there until its thing is done for the day, then gone: no ticks, no
+counts of days. If nothing is waiting the card says only what to watch. Click
+any line in any order; the order is a suggestion (short retrieval first while
+fresh, the hard slice second, speaking third, the long easy listening last).
 
 Click a video (or select it with ↑ ↓ and press Return) to play it.
+
+### The player
 
 | Key | In the player |
 | --- | --- |
@@ -63,42 +123,75 @@ Click a video (or select it with ↑ ↓ and press Return) to play it.
 | F | Full screen (or double-click the picture). Esc leaves it |
 | L | **Loop this line.** It plays, then waits as long as it took (at least a second and a half) for you to say it back, then plays again. ↓ shows it for the whole loop. L, Space or an arrow stops |
 | − | **Slower:** three-quarter speed, the voice's pitch kept. Again for full speed |
-| K | **Keep this line**, with its sound, to hear again tomorrow and on later days (below) |
+| K | **Keep this line**, with its sound, as a card to hear again tomorrow and on later days (below) |
+| W | **A word.** A slip over the picture with the line's words as small cards, the rarest chosen first (the one you most likely don't know): its lemma with the stress marked, what kind of word, two or three English glosses, and where it stands in the frequency list (*common: 1,840th · less common: 6,200th · rare: past the common 10,000*). ← → choose a word (or click one), **K keeps the word** as a card with its line's sound, W or Esc closes |
+| C | **Today's clip** (below); C again leaves it |
 | H | **How was this video?** A slip at the top of the picture: *too easy · about right · too hard* and *more like this · less like this*. One click each, about the video, never a score; click a chosen word again to take it back, ✕ or H to put it away, or just ignore it (it goes by itself). It also comes up once by itself when the video is 90% watched, unless both are already chosen |
 
-Subtitles are off when a video opens. Each video remembers where you left it.
+Subtitles are off when an easy or natural video opens. A **fast** video opens
+with Russian subtitles **on** the first time through (the research for hard
+native video: same-language captions help, English ones hurt), and off from
+the second viewing; S still toggles. Each video remembers where you left it.
 A video counts as finished at 90%, and skipping ahead with the scrubber
 doesn't count towards that.
 
+The dictionary is OpenRussian's (en.openrussian.org, CC BY-SA 4.0; the CSV
+mirror at github.com/Badestrand/russian-dictionary), 46,000 lemmas with their
+forms, built into `Resources/dict.sqlite` by `Tools/mkdict.py`; the ranks are
+the Russian National Corpus's (Lyashevskaya & Sharoff, *A Frequency Dictionary
+of Modern Russian*, 2009, dict.ruslang.ru/freq.php). It works offline; 10.9's
+own SQLite reads it. Pronoun cases are added by hand (the dump has no forms
+for them); ё and е both find a word.
+
 ### A line you missed
 
-The keys follow what the research says trains the ear for fast speech
-(`dendron-autopilot/reports/r1-research.md`): hear the line again (↑) a
-time or two and try to say what it was; then show it (↓) and compare; slow
-it down (−) only after a try at full speed, and go back to full speed;
-loop it (L) and say the whole sentence back in the pause (for someone who
-speaks in short phrases, saying native sentences whole is practice in
-building them). Keep (K) the few worth knowing: a new verb, a chunk you'd like
-to say yourself.
+The keys follow what the research says trains the ear for fast speech: hear
+the line again (↑) a time or two and try to say what it was; then show it (↓)
+and compare; slow it down (−) only after a try at full speed, and go back to
+full speed; loop it (L) and say the whole sentence back in the pause (for
+someone who speaks in short phrases, saying native sentences whole is practice
+in building them). Look up (W) the word that stopped you and see whether it's
+worth keeping: a common word is, a rare one can wait. Keep (K) the few worth
+knowing: a new verb, a chunk you'd like to say yourself.
 
-### Lines to hear again
+### Today's clip (⌘K)
 
-**Shelf > Lines to Hear Again** (⌘L) shows today's kept lines on an index
-card, one at a time. When there are some, the shelf's nameplate says how
-many.
+Two or three minutes of the week's fast video (or the natural one, or any
+with subtitles), chosen once a day: it starts at the line you asked for most
+help on in earlier viewings (replayed, shown, looped, looked up) that no
+earlier clip covered, else at the first line after the last clip worked, and
+ends on a sentence boundary. A ruled card at the top of the picture walks
+three passes (ten to fifteen minutes; the deliberate kind of listening:
+bottom-up decoding, shadowing, words met on purpose):
+
+1. **Listen.** No text. The stretch plays twice.
+2. **Read.** Captions on; it pauses after each line. Space goes on, W looks a
+   word up, K keeps the line or the word, ↑ hears it again, − slows it.
+3. **Say along.** Each line once to hear, then again for you to speak over it.
+   **R** records your say-along through the built-in microphone and plays it
+   back after the speaker's line, so you hear the two next to each other.
+
+Then: "Done. Another tomorrow." The desk card names the clip until its three
+passes are done; a clip half worked is picked up where it stopped. ← → or C
+leave the clip. Reports say which stretch and how far it got.
+
+### Cards (⌘L)
+
+**Shelf > Cards** shows today's kept lines and words on an index card, one at
+a time. When there are some, the desk card says how many.
 
 | Key | |
 | --- | --- |
 | Space | Hear it again (it plays by itself when it comes up). On a "say it" card: hear it and see it |
 | − | Three-quarter speed, and full speed again |
-| ↓ | Show the line, and the one before it for context |
+| ↓ | Show the line, and the one before it for context. On a word card, the word is underlined in its line, with its lemma and gloss under it |
 | Tab | **Write what it means**, in your own words, under the shown line. Return keeps it, Esc leaves it as it was |
 | ← | **Not yet.** Back tomorrow, from the start, and once more before today's are done |
 | → | **Knew it.** Back later |
 | ⌫ | Put it away for good |
 | Esc | Close |
 
-Sound first, so it's the ear that's tested, not reading. A line kept today
+Sound first, so it's the ear that's tested, not reading. A card kept today
 comes back tomorrow; each "knew it" waits longer: 3, 7, 16, 35, then 75
 days, and after that it's known and put away. Six "not yet"s put it away
 too: a line that hard is better met again in a story.
@@ -110,19 +203,45 @@ words in blue ink: say it in Russian**, aloud, as a whole sentence; then ↓
 plays the speaker and shows the line, to compare. Hearing and understanding
 trains the ear; saying it from the meaning trains the speaking (recalling the
 Russian from the meaning builds what you can say, not just what you
-recognise). A line without your words is only ever heard.
+recognise). A word card has its gloss as its meaning from the start, so it
+comes both ways at once; a line without your words is only ever heard.
 
-At most **fifteen lines kept a day** and **sixty heard again a day** (about
-twenty minutes), and K keeps nothing while **forty-five are already waiting**:
-the review never grows into a backlog that eats the listening. These sizes
-are for an A2–B1 learner adding about fifteen items a day
-(`dendron-autopilot/reports/r1-research.md`). Nothing is counted, scored or
-kept in a row on screen. When today's are done it says so and stops.
+At most **fifteen cards kept a day** and **sixty heard again a day** (about
+twenty minutes), counting the other Mac's day too, and K keeps nothing while
+**forty-five are already waiting**: the review never grows into a backlog
+that eats the listening. These sizes are for an A2–B1 learner adding about
+fifteen items a day. When today's are done it says so and stops.
 
 A kept line's sound is cut from the video when you keep it (the line, from
-0.15 s before to 0.35 s after), so it stays when the video leaves the shelf.
-If the cut fails the line is kept without it, and the card says to read it
-aloud instead. Each Mac keeps its own lines.
+0.15 s before to 0.35 s after), so it stays when the video leaves the shelf; a
+word card shares its line's sound. If the cut fails the card is kept without
+it, and says to read it aloud instead.
+
+### Say (⌘S)
+
+The speaking practice, on an index card with a sand-glass. **Islands** (⌘I)
+are the topics you can talk about, in Russian, one a line, yours to edit; it
+starts with eight for a Waterloo student (Мой день, Университет и учёба, Моя
+семья, Непал, Что я смотрел на этой неделе, Еда, Планы на выходные, Почему я
+учу русский). Each day proposes the next island in turn, or **Перескажи:
+«story»** when you finished a story today (retelling is task repetition).
+
+The same topic **three times, shorter each time**: 2 min · 1½ · 1 by default
+(Shelf > Pass Lengths also has 3·2·1½ and 4·3·2; Nation's 4/3/2). Space starts
+a pass; the sand runs down; each pass is recorded through the built-in
+microphone. After the third:
+
+| Key | |
+| --- | --- |
+| Space | Hear the last pass |
+| Tab | **A note for the tutor**: something you fumbled or lacked, up to three a day, kept in `Say/Tutor.txt` under the date and carried in reports |
+| M | **Last month**: play the previous month's recording, then today's, back to back. Your own voice, two dates, no number |
+| ⌘I | The islands, written on the card (⌘I or Esc keeps them) |
+| Esc | Close |
+
+Today's passes are kept until midnight. The last pass of the **first Say of
+each month** stays as the month's recording (`Say/Recordings/YYYY-MM.m4a`).
+Without a microphone the sand still runs and the card says so once.
 
 ## How the shelf gets here
 
@@ -309,8 +428,8 @@ JE4cI_Knzvc | finished | 19:20 of 19:20 | She Cut Her Hair to Save Her Husband �
 abcdefghijk | partly | 4:10 of 11:30 | The Fox and the Crane
 lmnopqrstuv | not started | 0:00 of 9:12 | ...
 
-Help (shown, heard again, looped, slowed, transcript, subtitles, kept):
-JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | kept 2
+Help (shown, heard again, looped, slowed, transcript, subtitles, looked up, kept):
+JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | looked up 3 | kept 2
 
 How it felt (the owner's own choice, about the video):
 JE4cI_Knzvc | about right | more like this
@@ -318,8 +437,21 @@ JE4cI_Knzvc | about right | more like this
 Lines help was asked on:
 JE4cI_Knzvc | 4:10 | shown 1, heard again 3, looped 1 | Она отрезала волосы, чтобы спасти мужа.
 
+Clips worked (stretch | passes of 3 | day):
+abcdefghijk | 2:10–4:40 | passes 3 | day 2026-10-14
+
 Kept:
 JE4cI_Knzvc | 4:10 | Она отрезала волосы, чтобы спасти мужа. | means: She cut off her hair to save her husband.
+
+Words kept (word (lemma) | gloss | the line):
+JE4cI_Knzvc | 4:10 | отрезала (отре́зать) | cut off | in: Она отрезала волосы, чтобы спасти мужа.
+
+Said (day | topic | passes of 3 | recorded):
+2026-10-14 | Мой день | passes 3 | recorded
+
+For the tutor:
+## 2026-10-14
+я путаю винительный и родительный
 ```
 
 - `from:` is the Mac's name in Sharing (not its network host name, which can
@@ -341,7 +473,12 @@ JE4cI_Knzvc | 4:10 | Она отрезала волосы, чтобы спаст
   morphological dictionary for that, which the Mac Pro doesn't have).
 - **Kept** lists the lines kept from this shelf's videos, one per line (a
   two-line cue joined with " / "), with `means:` and the owner's own words
-  when they wrote some.
+  when they wrote some. **Words kept** lists the word cards: the word as it
+  stood, its lemma with the stress, the gloss, and the line.
+- **Clips worked**: each stretch of a video worked as today's clip, how many
+  of its three passes were finished, and the day. **Said**: each day of this
+  shelf a Say was done, the topic, how many passes, whether the microphone
+  caught it. **For the tutor**: the owner's own notes, by date, as written.
 
 All of it is for Claude choosing the next shelf (the level mix, more or less of
 a kind, which verbs to look for). The app never shows these numbers.
@@ -448,7 +585,7 @@ MacBook), clones it to `~/Study`, runs the self-test below, and adds the apps
 to Login Items. The app reads `~/Study/Russian/shelf.signed`, the clone
 Syllabus uses. (The `StudyFolder` default changes that, for testing.)
 
-`Russian Shelf.app/Contents/MacOS/RussianShelf --selftest` checks everything
+`Shelf.app/Contents/MacOS/Shelf --selftest` checks everything
 the app relies on, on the Mac it runs on, and prints a line each:
 
 - the real key opens a sealed shelf through 10.9's Security framework, and an
@@ -463,18 +600,22 @@ the app relies on, on the Mac it runs on, and prints a line each:
 ## Building
 
 ```
-make            build/RussianShelf.app
-make test       the model, under Rosetta: crypto, the shelf format, sealed files
-                (good, tampered, wrong key, too many videos), decryption, subtitles
-                of both kinds, rotation and deletion, kept lines and their days,
-                cutting a line's sound, the yt-dlp command lines, reports, real git
-                pulls and report pushes against a bare repository
+make            build/Shelf.app
+make test       the model, under Rosetta: crypto, the shelf format and its kinds,
+                sealed files (good, tampered, wrong key, too many videos),
+                decryption, subtitles of both kinds, rotation and deletion, cards
+                (lines and words) and their days, the dictionary, today's clip,
+                Say, cutting a line's sound, the yt-dlp command lines, reports,
+                real git pulls, report pushes and the sync between two app
+                folders against a bare repository
 make tlstest    the certificate checks above (needs the network)
-make shots      the shelf, the player and the Lines window, rendered to build/shots
+make shots      the shelf, the player, the slips and cards, Cards and Say, to build/shots
 make verify     the app and every bundled binary are Mavericks-compatible
 make analyze    the static analyser
-make dist       all of these, then Russian Shelf.zip
+make dist       all of these, then Shelf.zip
 make shelfsign  build/shelfsign, for the MacBook
+make dict       Resources/dict.sqlite from OpenRussian's CSVs and the RNC list:
+                make dict DICT_SRC=<folder> DICT_FREQ=<freqrnc2011.csv>
 ```
 
 Like Syllabus, it's built with today's Xcode against the real 10.9 SDK in
