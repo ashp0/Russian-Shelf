@@ -89,6 +89,11 @@ media-subscriptions-prefpane. Never push it anywhere public.
 
 ## Still untested on the real Mac Pro
 
+- 2026-10-31 (battery, branch shelf-battery): the quiet-round skips (no `git archive`,
+  no publish while nothing changed) ran against a local bare repo and in the suite,
+  not yet between the two real Macs over ssh. Measuring tools and numbers:
+  `~/dendron-autopilot/reports/shelf-battery.md`.
+
 - 2026-10-30 (the redesign): the desk card, kinds and plates, the word slip and word
   cards, today's clip (its passes, the say-along recording), Say (the sand-glass, the
   microphone, the month's recording, the tutor's note, the islands editor) ran in tests

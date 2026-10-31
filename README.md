@@ -524,7 +524,9 @@ Russian/Sync/<host>/State.plist          the Mac's State.plist
 
 1. Every other Mac's folder is read out of the commit the clone is at
    (`git archive`) into `Sync In/` in the app's folder. It is never read from
-   the working tree, which Syllabus may be updating at that moment.
+   the working tree, which Syllabus may be updating at that moment. When the
+   other Macs' folders at that commit are as they were last round (one
+   `git ls-tree`), `Sync In/` is already right and isn't read again.
 2. With the library and the cards saved first, on the main thread (so
    nothing done on this Mac in between can be lost), the other Macs' files are
    merged into the files here, and the app reads them again. While the Lines
@@ -537,7 +539,9 @@ Russian/Sync/<host>/State.plist          the Mac's State.plist
    when nothing changed. If the other Mac pushed first, this one fetches and
    builds the commit again. A key that can only read leaves the clone as it
    was. This step and the reports' push run one after the other, never at
-   once.
+   once. When `Sync Out/` and this Mac's folder upstream are as the last
+   publish left them, there is nothing to do and nothing is run, not even a
+   fetch (the app remembers that only while it runs).
 
 The merge (`RSMerge.h`, pure functions; deterministic and idempotent, so both
 Macs end alike):
@@ -574,6 +578,24 @@ today, as of its last sync) and `keptTodayOnOtherHosts:today:` (cards it kept
 today that this Mac doesn't have yet).
 
 What git said each round is in `Logs/sync.log`.
+
+## Battery
+
+Left alone, with the bookcase showing, the app sleeps: no timers but the
+hourly round and the five-minute day check (both with tolerance, so OS X can
+run them with other wakeups), no polling, App Nap allowed. Measured on the Mac
+Pro (2026-10-31, `proc_pid_rusage`): idle, about 0 % of the CPU and a few
+wakeups a minute; a quiet round, one `git pull` (about 0.8 s of git 1.9's CPU)
+and two `git ls-tree`. Playing costs what AVFoundation's decoding costs (about
+4 % here); AVKit keeps the Mac awake only while a video plays. A Say pass,
+about 1.4 % for its minutes. The heavy things run rarely: yt-dlp (about 10 s
+of CPU a video, once, when a shelf arrives; a video that fails is tried again
+each round), the sound cut when a line is kept.
+
+What keeps it that way: views mark only the rect that changed (`make shots`
+checks the bookcase and the sand-glass pixel for pixel); a timer exists only
+while something moves; files are written only when they change
+(`RSWritePlist`), so the sync sees nothing new when there is nothing new.
 
 ## On the Mac Pro
 
