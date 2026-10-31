@@ -279,6 +279,12 @@ int main(int argc, const char *argv[])
         [[c shelfView] hoverDeskLine:0];
         printf("  desk     %lu lines\n", (unsigned long)[[[c shelfView] deskLines] count]);
         ShootBoth([c window], out, @"shelf-desk");
+        // The mouse over the last line must light the last line (the view is flipped).
+        NSInteger last = (NSInteger)[[[c shelfView] deskLines] count] - 1;
+        NSRect lastRect = [[[RSStyle deskLineRectsIn:[[c shelfView] deskCardRect] count:(NSUInteger)last + 1 flipped:YES] lastObject] rectValue];
+        [[c shelfView] hoverDeskLine:[[c shelfView] deskLineAtPoint:NSMakePoint(NSMidX(lastRect), NSMidY(lastRect))]];
+        printf("  desk     hovering the last line lights %ld (expected %ld)\n", (long)[[c shelfView] deskHover], (long)last);
+        ShootBoth([c window], out, @"shelf-desk-last");
         [[c shelfView] hoverDeskLine:-1];
         setenv("RUSSIAN_SHELF_NOW", "2026-10-14 20:30", 1);
         // After watching: how was it? One click each, about the video.

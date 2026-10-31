@@ -26,6 +26,8 @@
 - (void)fitToWidth;      // height for the rows, at least the visible height
 - (void)hoverRow:(NSInteger)index;     // for the screenshots
 - (void)hoverDeskLine:(NSInteger)index;
+- (NSInteger)deskLineAtPoint:(NSPoint)point;      // in the view's coordinates; -1 for none
+- (NSInteger)deskHover;
 - (NSRect)deskCardRect;
 
 @end

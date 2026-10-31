@@ -141,7 +141,7 @@
 
 - (NSInteger)deskLineAtPoint:(NSPoint)point
 {
-    NSArray *rects = [RSStyle deskLineRectsIn:[self deskCardRect] count:[_deskLines count]];
+    NSArray *rects = [RSStyle deskLineRectsIn:[self deskCardRect] count:[_deskLines count] flipped:[self isFlipped]];
     for (NSUInteger i = 0; i < [rects count]; i++)
         if (NSPointInRect(point, NSInsetRect([[rects objectAtIndex:i] rectValue], -6, 0))) return (NSInteger)i;
     return -1;
@@ -198,6 +198,8 @@
 {
     [self setRow:&_hover to:index];
 }
+
+- (NSInteger)deskHover { return _deskHover; }
 
 - (void)hoverDeskLine:(NSInteger)index
 {

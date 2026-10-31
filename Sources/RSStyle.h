@@ -63,7 +63,9 @@ typedef enum {
 // The desk card under the crown: cream, "Today", one line per thing to do.
 // Height 0 for no lines (then nothing is drawn).
 + (CGFloat)deskCardHeightForLines:(NSUInteger)count;
-+ (NSArray *)deskLineRectsIn:(NSRect)rect count:(NSUInteger)count;      // NSValue rects, for clicks
+// NSValue rects, one a line, for clicks: `flipped` is the view's own
+// orientation (asked from a mouse handler there is no drawing context to tell).
++ (NSArray *)deskLineRectsIn:(NSRect)rect count:(NSUInteger)count flipped:(BOOL)flipped;
 + (void)drawDeskCardIn:(NSRect)rect lines:(NSArray *)lines hover:(NSInteger)hover;
 // A small brass plate on the back wall above a group of one kind.
 + (CGFloat)kindPlateHeight;

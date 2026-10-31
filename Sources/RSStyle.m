@@ -516,11 +516,10 @@ static NSRect RSDeskCard(NSRect rect)
     return RSDeskTop + RSDeskPad + RSDeskHeading + count * RSDeskLineHeight + RSDeskPad + RSDeskBottom;
 }
 
-+ (NSArray *)deskLineRectsIn:(NSRect)rect count:(NSUInteger)count
++ (NSArray *)deskLineRectsIn:(NSRect)rect count:(NSUInteger)count flipped:(BOOL)flipped
 {
     NSMutableArray *rects = [NSMutableArray array];
     NSRect card = RSDeskCard(rect);
-    BOOL flipped = RSFlipped();
     for (NSUInteger i = 0; i < count; i++) {
         CGFloat fromTop = RSDeskPad + RSDeskHeading + i * RSDeskLineHeight;
         NSRect r = NSMakeRect(NSMinX(card) + RSDeskPad, flipped ? NSMinY(card) + fromTop : NSMaxY(card) - fromTop - RSDeskLineHeight,
@@ -545,7 +544,7 @@ static NSRect RSDeskCard(NSRect rect)
     CGFloat ruleY = flipped ? NSMaxY(head) + 3 : NSMinY(head) - 3;
     [RSRGB(0xe08a8a, 0.85) set];
     NSRectFillUsingOperation(NSMakeRect(NSMinX(card) + 1, ruleY, NSWidth(card) - 2, 1), NSCompositeSourceOver);
-    NSArray *rects = [self deskLineRectsIn:rect count:[lines count]];
+    NSArray *rects = [self deskLineRectsIn:rect count:[lines count] flipped:flipped];
     NSDictionary *label = RSText(RSSerifBold(12), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByClipping);
     NSDictionary *key = RSText(RSSerifItalic(11), RSInkFaint(), NSRightTextAlignment, NSLineBreakByClipping);
     for (NSUInteger i = 0; i < [lines count]; i++) {
