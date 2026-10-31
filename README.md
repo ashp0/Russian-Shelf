@@ -325,7 +325,9 @@ JE4cI_Knzvc | 4:10 | Она отрезала волосы, чтобы спаст
 - `from:` is the Mac's name in Sharing (not its network host name, which can
   change with the wifi). Each Mac keeps its own record of what was
   watched on it, so a shelf watched on two Macs has two sets of reports: the
-  newest from each Mac counts.
+  newest from each Mac counts. Since the Macs sync (below), the first lines
+  (finished, how far) and how it felt are the same in both. Help, the lines
+  help was asked on and Kept are still each Mac's own.
 - **Help** (only for videos where something was asked for): how many times a
   line was shown (↓), heard again (↑), looped (L), slowed (− turned on), the
   transcript opened or a line in it clicked (T), subtitles turned on (S), and
@@ -357,6 +359,82 @@ Pulls are Syllabus's (`SYSync.m`): `git pull --ff-only`, git over SSH with
 `BatchMode=yes` (`Resources/shelf-ssh`), no prompts, a two-minute limit. When
 Syllabus is pulling the same clone at the same moment and holds
 `index.lock`, the pull waits and tries again for about twenty seconds.
+
+## Sync between Macs
+
+Each Mac still keeps its own `State.plist` and `Lines/`, and its own reports.
+On top of that, after every pull that worked (each hour, at launch, at wake,
+⌘R), both Macs end up with the same progress, cards and their sound, islands,
+notes for the tutor and the month's recordings. All of it goes through the
+study clone both already pull and push. The app shows nothing about it except
+one sentence in the status bar when a round fails.
+
+Each Mac writes only its own folder, `Russian/Sync/<host>/`. `<host>` is the
+Mac's name in Sharing, in Latin letters, lower case, with hyphens
+(`ashwins-mac-pro`; `RSSyncFolder +slugForName:`):
+
+```
+Russian/Sync/<host>/State.plist          the Mac's State.plist
+                    Cards.plist          its Lines/Lines.plist
+                    Cards/<key>.m4a      each card's sound
+                    Islands.txt          Say/Islands.txt
+                    Tutor.txt            Say/Tutor.txt
+                    Recordings/YYYY-MM.m4a   Say/Recordings/
+```
+
+`Say/Today/` is each Mac's own and never goes anywhere. The round
+(`RSSyncManager.h`):
+
+1. Every other Mac's folder is read out of the commit the clone is at
+   (`git archive`) into `Sync In/` in the app's folder. It is never read from
+   the working tree, which Syllabus may be updating at that moment.
+2. With the library and the cards saved first, on the main thread (so
+   nothing done on this Mac in between can be lost), the other Macs' files are
+   merged into the files here, and the app reads them again. While the Lines
+   window is open its cards are left alone until the next round.
+3. The files here are copied into `Sync Out/`.
+4. `Russian/Sync/<host>/` is made equal to `Sync Out/`: paths there are
+   added, updated and deleted, in one commit built in a private index on top
+   of the remote branch. The commit is checked to change nothing outside
+   that folder, then pushed and pulled, as reports are. Nothing is committed
+   when nothing changed. If the other Mac pushed first, this one fetches and
+   builds the commit again. A key that can only read leaves the clone as it
+   was. This step and the reports' push run one after the other, never at
+   once.
+
+The merge (`RSMerge.h`, pure functions; deterministic and idempotent, so both
+Macs end alike):
+
+- **Progress**, per video: the furthest point and the duration are the larger;
+  finished on either Mac is finished; the position is that of the Mac that
+  got further (as far on both: the later position). How it felt and more or
+  less like this: this Mac's if it chose one, else the other's. **Help counts
+  and the lines help was asked on are not merged**: each Mac reports its own,
+  as before. A video only the other Mac has comes in with its progress only.
+  Clips: one per stretch, the one with more passes. Say: by day, this Mac's
+  day if it has one. The notice, and anything the merge doesn't know: this
+  Mac's.
+- **Cards**, by key: the card heard most recently wins whole, unknown keys
+  included. If both were heard the same day, the higher step wins, then the
+  one put away, then the one with more lapses. A card put away on either Mac
+  stays put away, since nothing ever takes a card back out. A meaning
+  written on either Mac is kept. A card only one Mac has is kept, with its
+  sound. Cards are in the order kept. Today's count of cards heard is each
+  Mac's own.
+- **Islands**: this Mac's in its order, then the other's new ones. **Notes for
+  the tutor**: sections by their `## YYYY-MM-DD` heading, in date order; a day
+  both wrote keeps both Macs' lines. **Recordings**: a month this Mac lacks is
+  copied; a month's recording is never replaced.
+
+Deleting is not synced. An island removed on one Mac, or a month's recording
+deleted, comes back from the other. Merged text only grows.
+
+The daily brakes (fifteen kept, sixty heard) can count the other Mac's day:
+`+[RSSyncManager heardTodayOnOtherHosts:today:]` (its count of lines heard
+today, as of its last sync) and `keptTodayOnOtherHosts:today:` (cards it kept
+today that this Mac doesn't have yet).
+
+What git said each round is in `Logs/sync.log`.
 
 ## On the Mac Pro
 

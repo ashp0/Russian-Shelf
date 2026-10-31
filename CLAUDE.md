@@ -22,7 +22,7 @@ media-subscriptions-prefpane. Never push it anywhere public.
 ## Two machines
 
 - **MacBook** (macOS 27, Xcode): builds. `make dist` runs verify (107 bundled binaries
-  checked against the 10.9 SDK), analyze, ~333 unit checks and 11 TLS checks, then
+  checked against the 10.9 SDK), analyze, ~440 unit checks and 11 TLS checks, then
   writes `Russian Shelf.zip`.
 - **Mac Pro** (10.9.5): runs it. Its git is ≤ 1.9 (Command Line Tools for 10.9): no
   post-1.9 git syntax anywhere that runs there, tests included (the
@@ -30,7 +30,7 @@ media-subscriptions-prefpane. Never push it anywhere public.
   broke the suite). If you are Claude on the Mac Pro: install, run `--selftest`, read
   `Logs/report.log`, report back.
 - The Mac Pro *can* build the app, the tests, the shots and the icon with its own
-  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (333/333 on 2026-10-27),
+  Apple LLVM 6.0: `make SDK=/`, `make SDK=/ test` (440/440 on 2026-10-30, branch shelf-sync),
   `make SDK=/ shots`, `make SDK=/ icon`. Not `dist` (verify needs `dyld_info`), so
   `Russian Shelf.zip` is still rebuilt on the MacBook.
 
@@ -48,6 +48,12 @@ media-subscriptions-prefpane. Never push it anywhere public.
 - Each Mac that runs the app keeps its own State.plist and Lines/, and reports say
   `from: <host>`: the skill must combine the newest report from each Mac (both the Mac
   Pro and the other Mac have reported for the 2026-10-09 shelf).
+- Sync between Macs (README "Sync between Macs", `RSSyncManager.h`, `RSMerge.h`): after
+  each good pull, every other Mac's `Russian/Sync/<host>/` is merged in (progress, cards
+  with sound, islands, tutor notes, monthly recordings), then this Mac's folder is
+  published with the same private-index plumbing as reports, touching only that folder.
+  Help counts and help lines are per-Mac facts and are never merged, so reports keep
+  combining the newest from each Mac. Nothing about shelves, sealing or keys syncs.
 - The Help counts and Kept lines in reports are for Claude choosing the next shelf
   (the level ladder in the skill); never show counts, scores or streaks in the app.
 
@@ -63,6 +69,10 @@ media-subscriptions-prefpane. Never push it anywhere public.
 - Easy Russian's channel is `@EasyRussianVideos`.
 
 ## Still untested on the real Mac Pro
+
+- Sync between Macs (2026-10-30, branch shelf-sync): tested only through a bare
+  repository (two app folders, git 1.9.5), never between the real two Macs and never
+  with the MacBook's newer git pushing its own `Russian/Sync/<host>/` folder.
 
 - 2026-10-27 (r1): L, −, K and the Lines window (with Tab for a meaning and the "say
   it in Russian" cards) and the H slip ran in tests and shots only; typing in the meaning
