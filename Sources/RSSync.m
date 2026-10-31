@@ -181,7 +181,7 @@ static NSString *RSTrimmed(NSString *s)
     [env setObject:@"30" forKey:@"GIT_HTTP_LOW_SPEED_TIME"];
     [env setObject:@"no" forKey:@"GIT_MERGE_AUTOEDIT"];
     for (NSString *who in [NSArray arrayWithObjects:@"AUTHOR", @"COMMITTER", nil]) {
-        [env setObject:@"Russian Shelf (Mac Pro)" forKey:[NSString stringWithFormat:@"GIT_%@_NAME", who]];
+        [env setObject:@"Shelf (Mac Pro)" forKey:[NSString stringWithFormat:@"GIT_%@_NAME", who]];
         [env setObject:@"russian-shelf@mac-pro.local" forKey:[NSString stringWithFormat:@"GIT_%@_EMAIL", who]];
     }
     NSString *ssh = [[NSBundle mainBundle] pathForResource:@"shelf-ssh" ofType:nil];
@@ -310,7 +310,7 @@ static NSString *RSOut(RSProcessResult *r)
         if (result) break;
         r = [self git:git in:folder args:[NSArray arrayWithObject:@"write-tree"] extra:privateIndex];
         NSString *tree = RSOut(r);
-        NSString *message = [NSString stringWithFormat:@"Russian Shelf: what was watched\n\n%@\n",
+        NSString *message = [NSString stringWithFormat:@"Shelf: what was watched\n\n%@\n",
                              [added componentsJoinedByString:@"\n"]];
         if (tree) r = [self git:git in:folder args:[NSArray arrayWithObjects:@"commit-tree", tree,
                                                     @"-p", base, @"-m", message, nil] extra:nil];

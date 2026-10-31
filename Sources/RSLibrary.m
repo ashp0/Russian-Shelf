@@ -101,6 +101,29 @@ static NSString *const RSStateFile = @"State.plist";
     return [state writeToFile:[_folder stringByAppendingPathComponent:RSStateFile] atomically:YES];
 }
 
+- (void)reload
+{
+    NSDictionary *state = [NSDictionary dictionaryWithContentsOfFile:[_folder stringByAppendingPathComponent:RSStateFile]];
+    [_watched removeAllObjects];
+    NSDictionary *watched = [state objectForKey:@"watched"];
+    if ([watched isKindOfClass:[NSDictionary class]])
+        for (NSString *identifier in watched)
+            if ([[watched objectForKey:identifier] isKindOfClass:[NSDictionary class]])
+                [_watched setObject:[[[watched objectForKey:identifier] mutableCopy] autorelease] forKey:identifier];
+    [self setNotice:[[state objectForKey:@"notice"] isKindOfClass:[NSString class]] ? [state objectForKey:@"notice"] : nil];
+    [_clips removeAllObjects];
+    NSDictionary *clips = [state objectForKey:@"clips"];
+    if ([clips isKindOfClass:[NSDictionary class]])
+        for (NSString *identifier in clips)
+            if ([[clips objectForKey:identifier] isKindOfClass:[NSArray class]])
+                [_clips setObject:[[[clips objectForKey:identifier] mutableCopy] autorelease] forKey:identifier];
+    [_say removeAllObjects];
+    NSDictionary *say = [state objectForKey:@"say"];
+    if ([say isKindOfClass:[NSDictionary class]])
+        for (NSString *day in say)
+            if ([[say objectForKey:day] isKindOfClass:[NSDictionary class]]) [_say setObject:[say objectForKey:day] forKey:day];
+}
+
 - (BOOL)writeShelfFile:(NSData *)file named:(NSString *)name
 {
     NSString *path = [_folder stringByAppendingPathComponent:name];

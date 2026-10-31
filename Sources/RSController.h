@@ -8,6 +8,7 @@
 //   4. download what's missing; once this week's are all here, delete last
 //      week's
 //   5. send what was watched (Russian/Reports/), if this Mac's key can write
+//   6. sync with the other Mac (Russian/Sync/<host>/, RSSyncManager.h)
 //
 // No File menu, no Open, no URL field, nothing dropped in: the shelf is the
 // only way to a video.

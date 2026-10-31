@@ -137,5 +137,8 @@ extern NSString *const RSWantMore, *const RSWantLess;
 - (NSArray *)sayDays;                                 // the days with an entry, ascending (NSNumber)
 
 - (BOOL)save;
+// Reads State.plist again (what was watched, the notice), after the sync
+// between Macs merged into it. The shelves stay as they are.
+- (void)reload;
 
 @end

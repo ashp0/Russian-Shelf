@@ -1,4 +1,5 @@
 #import "RSLines.h"
+#import "RSSyncManager.h"
 #include <math.h>
 
 const NSUInteger RSKeepPerDay = 15;
@@ -164,10 +165,18 @@ static NSString *RSLineKey(NSString *video, double start)
     return n;
 }
 
-// Why nothing more can be kept today, or nil.
+// The app's folder: Lines/ is inside it, and so is Sync In/, where the other
+// Mac's day is read from (RSSyncManager.h).
+- (NSString *)appFolder
+{
+    return [_folder stringByDeletingLastPathComponent];
+}
+
+// Why nothing more can be kept today, or nil. The other Mac's day counts: the
+// dose is the owner's dose, whichever Mac they sit at.
 - (NSString *)brakeOn:(long)today
 {
-    if ([self keptOn:today] >= RSKeepPerDay)
+    if ([self keptOn:today] + [RSSyncManager keptTodayOnOtherHosts:[self appFolder] today:today] >= RSKeepPerDay)
         return [NSString stringWithFormat:@"%lu kept today: that’s plenty. More tomorrow.", (unsigned long)RSKeepPerDay];
     if ([self waitingOn:today] >= RSWaitingBrake)
         return [NSString stringWithFormat:@"%lu cards are waiting to be heard again (⌘L). Those first.", (unsigned long)[self waitingOn:today]];
@@ -259,7 +268,7 @@ static NSString *RSWordKey(NSString *video, double start, NSString *word)
         long da = [(RSKeptLine *)a due], db = [(RSKeptLine *)b due];
         return da < db ? NSOrderedAscending : da > db ? NSOrderedDescending : NSOrderedSame;
     }];
-    NSUInteger heard = [self heardOn:today];
+    NSUInteger heard = [self heardOn:today] + [RSSyncManager heardTodayOnOtherHosts:[self appFolder] today:today];
     NSUInteger room = heard >= RSHearPerDay ? 0 : RSHearPerDay - heard;
     return [sorted count] > room ? [sorted subarrayWithRange:NSMakeRange(0, room)] : sorted;
 }
