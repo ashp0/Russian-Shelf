@@ -56,6 +56,13 @@ RSClipPlan *RSChooseClip(NSString *video, RSSubtitles *subtitles, NSArray *helpe
             if ([(RSLine *)[lines objectAtIndex:i] start] >= after - 0.01 && !RSInWorked([(RSLine *)[lines objectAtIndex:i] start], worked)) { first = i; break; }
     }
     if (first == NSNotFound) return nil;
+    return RSClipFromLine(video, subtitles, first);
+}
+
+RSClipPlan *RSClipFromLine(NSString *video, RSSubtitles *subtitles, NSUInteger first)
+{
+    NSArray *lines = [subtitles lines];
+    if (first >= [lines count]) return nil;
     double start = [(RSLine *)[lines objectAtIndex:first] start];
     // On to the last line that ends within the longest span; at least the
     // shortest span if there are lines for it.

@@ -12,7 +12,8 @@
 //   F            full screen (or a double-click on the picture); Esc leaves it
 //   L            this line again and again, with a pause after each time to
 //                say it back; L (or Space, or an arrow) stops
-//   −            three-quarter speed, and full speed again (the pitch stays)
+//   − =          slower, faster: a ladder of 1.0, 0.9, 0.8, 0.7, 0.6, 0.5 (the
+//                pitch stays). A video reopens at the speed it was left at
 //   K            keep this line, with its sound, to hear again on later days
 //                (RSLines)
 //   H            how was this video? (too easy / about right / too hard; more
@@ -46,6 +47,9 @@
                 line:(RSLine *)line before:(RSLine *)before;
 // The clip moved on: `passes` of three are finished (3: done for today).
 - (void)player:(RSPlayer *)player clipFrom:(double)start to:(double)end passes:(NSUInteger)passes;
+// The owner stepped the speed (− or =) to `rate`: remembered for the video,
+// with the slowest ever chosen, for the report.
+- (void)player:(RSPlayer *)player rateChanged:(float)rate;
 @end
 
 // The clip's passes (RSClips.h): off, then listen, read, say along, done.
@@ -85,7 +89,12 @@ typedef enum {
 - (void)toggleTranscript;
 - (void)toggleFullScreen;
 - (void)toggleLoop;
-- (void)toggleSlower;
+// − and = step down and up the speed ladder (RSPlayerRates); the clip's
+// passes set their own (a fast video's clip: 0.6, 0.8, then 1.0), and − and =
+// still override them.
+- (void)stepSlower;
+- (void)stepFaster;
+@property (nonatomic) float rate;        // set before -show to reopen at a remembered speed
 - (void)keepLine;
 
 // W: the word slip over the picture, for the line being said: its words as
@@ -109,6 +118,10 @@ typedef enum {
 //     the speaker's.
 // Space pauses and goes on; C or Esc leaves the clip; ← → leave it too.
 - (void)startClipFrom:(double)start to:(double)end;
+// C with no clip under way: a clip from the line being said, two to three
+// minutes on (RSClipFromLine), whenever the owner wants to shadow. The
+// delegate hears of it with passes 0.
+- (void)startClipHere;
 - (void)leaveClip;
 @property (nonatomic, readonly) RSClipPass clipPass;
 @property (nonatomic, readonly) BOOL recordingSayAlong;
@@ -130,3 +143,12 @@ typedef enum {
 - (NSString *)visibleNote;        // the short note over the video now, or nil
 
 @end
+
+// The speed ladder: 1.0, 0.9, 0.8, 0.7, 0.6, 0.5. Nothing below 0.5: there the
+// words smear and stop sounding like speech.
+extern const float RSPlayerRates[];
+extern const NSUInteger RSPlayerRateCount;
+// The nearest step on the ladder to `rate` (1 for anything odd).
+float RSPlayerRateOnLadder(float rate);
+// "Full speed." or "0.6×".
+NSString *RSPlayerRateText(float rate);

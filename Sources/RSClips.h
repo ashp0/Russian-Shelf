@@ -26,5 +26,10 @@ extern const double RSClipShortest, RSClipLongest;    // 120 s, 180 s
 // the video has no lines left to work.
 RSClipPlan *RSChooseClip(NSString *video, RSSubtitles *subtitles, NSArray *helped, NSArray *worked);
 
+// A clip from a line the owner chose (C in the player, whenever they like
+// to shadow): from that line, two to three minutes on to a sentence
+// boundary. nil past the end.
+RSClipPlan *RSClipFromLine(NSString *video, RSSubtitles *subtitles, NSUInteger first);
+
 // "2:10–4:40"
 NSString *RSClipSpan(double start, double end);

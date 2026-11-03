@@ -87,7 +87,18 @@ static BOOL RSHasWord(NSString *s, NSString *word)
 @property (nonatomic, readwrite, copy) NSString *sealed;
 @property (nonatomic, readwrite, copy) NSArray *videos;
 @property (nonatomic, readwrite, copy) NSString *fingerprint;
+@property (nonatomic, readwrite, copy) NSDictionary *subtitleHashes;
 @end
+
+static BOOL RSIsSHA256Hex(NSString *s)
+{
+    if ([s length] != 64) return NO;
+    for (NSUInteger i = 0; i < 64; i++) {
+        unichar c = [s characterAtIndex:i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return NO;
+    }
+    return YES;
+}
 
 static NSString *RSTrim(NSString *s)
 {
@@ -119,6 +130,7 @@ static BOOL RSIsSealedTime(NSString *s)
     [_sealed release];
     [_videos release];
     [_fingerprint release];
+    [_subtitleHashes release];
     [super dealloc];
 }
 
@@ -132,6 +144,7 @@ static BOOL RSIsSealedTime(NSString *s)
     long start = 0;
     NSMutableArray *videos = [NSMutableArray array];
     NSMutableSet *seen = [NSMutableSet set];
+    NSMutableDictionary *hashes = [NSMutableDictionary dictionary];
     NSUInteger count = 0;
     NSString *kind = nil;          // the last "# kind:" seen, for the videos after it
 
@@ -203,6 +216,20 @@ static BOOL RSIsSealedTime(NSString *s)
             [video setTitle:title];
             [video setKind:kind];
             [videos addObject:video];
+        } else if ([key isEqualToString:@"subtitles"]) {
+            NSArray *parts = [[value componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
+                              filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
+            NSString *identifier = [parts count] ? [parts objectAtIndex:0] : @"";
+            NSString *hex = [parts count] > 1 ? [[parts objectAtIndex:1] lowercaseString] : @"";
+            if ([parts count] != 2 || ![RSVideo isValidIdentifier:identifier] || !RSIsSHA256Hex(hex)) {
+                *problem = [NSString stringWithFormat:@"Line %lu: subtitles are “id <sha-256 in hex>”.", (unsigned long)number];
+                return nil;
+            }
+            if ([hashes objectForKey:identifier]) {
+                *problem = [NSString stringWithFormat:@"Line %lu: %@ has subtitles twice.", (unsigned long)number, identifier];
+                return nil;
+            }
+            [hashes setObject:hex forKey:identifier];
         } else {
             *problem = [NSString stringWithFormat:@"Line %lu isn’t part of a shelf.", (unsigned long)number];
             return nil;
@@ -215,11 +242,17 @@ static BOOL RSIsSealedTime(NSString *s)
         *problem = [NSString stringWithFormat:@"It has %lu videos; a shelf holds at most %d.", (unsigned long)count, RSShelfMaxVideos];
         return nil;
     }
+    for (NSString *identifier in hashes)
+        if (![seen containsObject:identifier]) {
+            *problem = [NSString stringWithFormat:@"Subtitles for %@, which isn’t on the shelf.", identifier];
+            return nil;
+        }
     RSShelf *shelf = [[[RSShelf alloc] init] autorelease];
     [shelf setStart:start];
     [shelf setStartText:startText];
     [shelf setSealed:sealed];
     [shelf setVideos:videos];
+    [shelf setSubtitleHashes:hashes];
     return shelf;
 }
 
@@ -237,6 +270,9 @@ static BOOL RSIsSealedTime(NSString *s)
         }
         [s appendFormat:@"video: %@ | %@ | %@\n", [v identifier], [v channel], [v title]];
     }
+    for (RSVideo *v in _videos)
+        if ([_subtitleHashes objectForKey:[v identifier]])
+            [s appendFormat:@"subtitles: %@ %@\n", [v identifier], [_subtitleHashes objectForKey:[v identifier]]];
     return s;
 }
 
@@ -247,6 +283,7 @@ static BOOL RSIsSealedTime(NSString *s)
     [copy setStartText:_startText];
     [copy setSealed:sealed];
     [copy setVideos:_videos];
+    [copy setSubtitleHashes:_subtitleHashes];
     return copy;
 }
 
@@ -321,21 +358,25 @@ NSData *RSSignedMessage(NSData *iv, NSData *ciphertext)
     return message;
 }
 
-static NSString *RSFingerprint(NSData *file)
+NSString *RSSHA256Hex(NSData *data)
 {
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];
-    CC_SHA256([file bytes], (CC_LONG)[file length], digest);
+    CC_SHA256([data bytes], (CC_LONG)[data length], digest);
     NSMutableString *hex = [NSMutableString string];
-    for (int i = 0; i < 8; i++) [hex appendFormat:@"%02x", digest[i]];
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) [hex appendFormat:@"%02x", digest[i]];
     return hex;
 }
 
-NSData *RSSealShelf(RSShelf *shelf, NSData *aesKey, NSData *iv,
-                    NSData *(^sign)(NSData *message, NSString **problem), NSString **problem)
+static NSString *RSFingerprint(NSData *file)
+{
+    return [RSSHA256Hex(file) substringToIndex:16];
+}
+
+NSData *RSSealText(NSString *text, NSData *aesKey, NSData *iv,
+                   NSData *(^sign)(NSData *message, NSString **problem), NSString **problem)
 {
     *problem = nil;
-    if ([shelf sealed] == nil) { *problem = @"The shelf has no sealed time."; return nil; }
-    NSData *plain = [[shelf text] dataUsingEncoding:NSUTF8StringEncoding];
+    NSData *plain = [text dataUsingEncoding:NSUTF8StringEncoding];
     NSData *ciphertext = RSAESCTR(plain, aesKey, iv);
     if (ciphertext == nil) { *problem = @"Encryption failed."; return nil; }
     NSData *signature = sign(RSSignedMessage(iv, ciphertext), problem);
@@ -346,9 +387,18 @@ NSData *RSSealShelf(RSShelf *shelf, NSData *aesKey, NSData *iv,
     return [file dataUsingEncoding:NSUTF8StringEncoding];
 }
 
-RSShelf *RSOpenSealedShelf(NSData *file, NSData *aesKey, NSData *publicKey, NSString **problem)
+NSData *RSSealShelf(RSShelf *shelf, NSData *aesKey, NSData *iv,
+                    NSData *(^sign)(NSData *message, NSString **problem), NSString **problem)
 {
     *problem = nil;
+    if ([shelf sealed] == nil) { *problem = @"The shelf has no sealed time."; return nil; }
+    return RSSealText([shelf text], aesKey, iv, sign, problem);
+}
+
+NSString *RSOpenSealedText(NSData *file, NSData *aesKey, NSData *publicKey, NSString **fingerprint, NSString **problem)
+{
+    *problem = nil;
+    if (fingerprint) *fingerprint = nil;
     if ([file length] == 0 || [file length] > RSSealedMaxBytes) {
         *problem = [file length] ? @"The file is too big to be a shelf." : @"The file is empty.";
         return nil;
@@ -379,13 +429,22 @@ RSShelf *RSOpenSealedShelf(NSData *file, NSData *aesKey, NSData *publicKey, NSSt
         *problem = @"It’s signed, but doesn’t decrypt with this app’s key.";
         return nil;
     }
+    if (fingerprint) *fingerprint = RSFingerprint(file);
+    return list;
+}
+
+RSShelf *RSOpenSealedShelf(NSData *file, NSData *aesKey, NSData *publicKey, NSString **problem)
+{
+    NSString *fingerprint = nil;
+    NSString *list = RSOpenSealedText(file, aesKey, publicKey, &fingerprint, problem);
+    if (list == nil) return nil;
     RSShelf *shelf = [RSShelf shelfWithText:list problem:problem];
     if (shelf == nil) return nil;
     if ([shelf sealed] == nil) {
         *problem = @"It has no sealed time.";
         return nil;
     }
-    [shelf setFingerprint:RSFingerprint(file)];
+    [shelf setFingerprint:fingerprint];
     return shelf;
 }
 

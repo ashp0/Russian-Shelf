@@ -133,6 +133,18 @@ static void TestSyncMerge(NSString *fixtures)
           [ve objectForKey:@"macbookOnly"] == nil, "a video only there comes with its progress and feeling, not its help");
     CHECK([[m objectForKey:@"notice"] isEqualToString:[sa objectForKey:@"notice"]] && [[m objectForKey:@"futureKey"] isEqualToString:@"keep me"] &&
           [m objectForKey:@"otherFuture"] == nil, "notice and unknown top-level keys: this Mac's");
+    // The speed a video was left at, and the slowest: this Mac's rate when it has one, the slower slowest.
+    NSDictionary *rl = [NSDictionary dictionaryWithObject:[NSDictionary dictionaryWithObjectsAndKeys:
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat:0.8f], @"rate", [NSNumber numberWithFloat:0.7f], @"slowest", nil], @"v1",
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithDouble:10], @"furthest", nil], @"v2", nil] forKey:@"watched"];
+    NSDictionary *rr = [NSDictionary dictionaryWithObject:[NSDictionary dictionaryWithObjectsAndKeys:
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat:0.6f], @"rate", [NSNumber numberWithFloat:0.5f], @"slowest", nil], @"v1",
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat:0.9f], @"rate", [NSNumber numberWithFloat:0.9f], @"slowest", nil], @"v2", nil] forKey:@"watched"];
+    NSDictionary *rm = [[RSMerge state:rl with:rr] objectForKey:@"watched"];
+    CHECK(fabs([[[rm objectForKey:@"v1"] objectForKey:@"rate"] doubleValue] - 0.8) < 0.001 &&
+          fabs([[[rm objectForKey:@"v1"] objectForKey:@"slowest"] doubleValue] - 0.5) < 0.001 &&
+          fabs([[[rm objectForKey:@"v2"] objectForKey:@"rate"] doubleValue] - 0.9) < 0.001 &&
+          fabs([[[rm objectForKey:@"v2"] objectForKey:@"slowest"] doubleValue] - 0.9) < 0.001, "speeds: this Mac's rate, the slower slowest, theirs when only they have one");
     NSArray *clips = [[m objectForKey:@"clips"] objectForKey:@"vidAAAAAAAA"];
     CHECK([clips count] == 3 && [[[clips objectAtIndex:0] objectForKey:@"passes"] intValue] == 3 &&
           [[[clips objectAtIndex:0] objectForKey:@"day"] longValue] == T - 4 && [[[clips objectAtIndex:1] objectForKey:@"start"] doubleValue] == 100 &&

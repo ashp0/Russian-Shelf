@@ -359,7 +359,8 @@ static const float RSReviewSlowerRate = 0.75;
             heading = _state == RSReviewListening ? (word ? @"Listen. Which word was it, and what does it mean?" : @"Listen. What does it say?")
                                                   : (word ? @"The word, in its line. Say the line aloud." : @"Now say it aloud.");
             if ([[_line title] length])
-                source = [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
+                source = RSIsReadingKey([_line video]) ? [NSString stringWithFormat:@"From the reading “%@”", [_line title]]
+                                                       : [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
             if (_state == RSReviewShown) {
                 before = [_line before];
                 text = [_line text];
@@ -371,7 +372,8 @@ static const float RSReviewSlowerRate = 0.75;
         case RSReviewSaying:
             heading = word ? @"Say the word in Russian, then the line." : @"Say it in Russian.";
             if ([[_line title] length])
-                source = [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
+                source = RSIsReadingKey([_line video]) ? [NSString stringWithFormat:@"From the reading “%@”", [_line title]]
+                                                       : [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
             prompt = [_line meaning];
             keys = [NSArray arrayWithObjects:@"↓", @"Hear it and see it", @"←", @"Not yet", @"→", @"Knew it",
                     @"⌫", @"Put away", nil];

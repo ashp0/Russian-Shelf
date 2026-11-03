@@ -2,8 +2,12 @@
 //
 //   shelfsign seal <list.txt> <shelf.signed>   check the list, encrypt it, sign
 //                                              it, check the result opens in
-//                                              the app, write it
+//                                              the app, write it. A list whose
+//                                              first line is "Russian Reading 1"
+//                                              (RSReading.h) is sealed the same
+//                                              way, into Russian/reading.signed
 //   shelfsign open <shelf.signed>              check and print a sealed shelf
+//                                              or reading list
 //   shelfsign pubkey                           the keychain key's public half
 //   shelfsign keygen <RSKeys.c>                once: make the keys (make keys)
 //
@@ -18,6 +22,7 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #import "RSShelf.h"
+#import "RSReading.h"
 #import "RSCrypto.h"
 
 static NSString *const RSKeyLabel = @"Russian Shelf signing key";
@@ -145,29 +150,61 @@ static int Pubkey(void)
     return 0;
 }
 
+static SecKeyRef SigningKey(void)
+{
+    SecKeyRef key = CopyPrivateKey();
+    if (key == NULL) Fail(@"the keychain has no Russian Shelf signing key (make keys)");
+    if (![PublicKeyInfo(key) isEqualToData:RSAppPublicKey()])
+        Fail(@"the keychain's key isn't the one built into the app: rebuild the app after make keys");
+    return key;
+}
+
+static NSData *(^Signer(SecKeyRef key))(NSData *, NSString **)
+{
+    return [[^NSData *(NSData *message, NSString **why) {
+        CFErrorRef error = NULL;
+        NSData *signature = (NSData *)SecKeyCreateSignature(key, kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
+                                                            (CFDataRef)message, &error);
+        if (signature == nil) *why = [NSString stringWithFormat:@"signing failed: %@", ErrorText(error)];
+        return [signature autorelease];
+    } copy] autorelease];
+}
+
+// A reading list (RSReading.h): checked, sealed and checked again as the app will.
+static int SealReading(NSString *listPath, NSString *text, NSString *outPath)
+{
+    NSString *problem = nil;
+    RSReadingSet *set = [RSReadingSet setWithText:text problem:&problem];
+    if (set == nil) Fail([NSString stringWithFormat:@"%@: %@", [listPath lastPathComponent], problem]);
+    if ([set sealed]) Fail(@"the list already has a sealed: line; shelfsign writes that itself");
+    set = [set setSealedAt:Now("%Y-%m-%d %H:%M:%S")];
+    SecKeyRef key = SigningKey();
+    NSData *file = RSSealText([set text], RSAppAESKey(), RandomBytes(16), Signer(key), &problem);
+    CFRelease(key);
+    if (file == nil) Fail(problem);
+    RSReadingSet *opened = RSOpenReadingFile(file, &problem);
+    if (opened == nil) Fail([NSString stringWithFormat:@"the sealed file doesn't open: %@", problem]);
+    if (![[opened text] isEqualToString:[set text]]) Fail(@"the sealed file opens to a different list");
+    if (![file writeToFile:outPath atomically:YES]) Fail([NSString stringWithFormat:@"can't write %@", outPath]);
+    printf("Sealed %lu reading%s from %s (sealed %s) into %s\n", (unsigned long)[[opened items] count],
+           [[opened items] count] == 1 ? "" : "s", [[opened startText] UTF8String], [[opened sealed] UTF8String], [outPath UTF8String]);
+    return 0;
+}
+
 static int Seal(NSString *listPath, NSString *outPath)
 {
     NSError *readError = nil;
     NSString *text = [NSString stringWithContentsOfFile:listPath encoding:NSUTF8StringEncoding error:&readError];
     if (text == nil) Fail([NSString stringWithFormat:@"can't read %@", listPath]);
+    if (RSTextIsReadingList(text)) return SealReading(listPath, text, outPath);
     NSString *problem = nil;
     RSShelf *shelf = [RSShelf shelfWithText:text problem:&problem];
     if (shelf == nil) Fail([NSString stringWithFormat:@"%@: %@", [listPath lastPathComponent], problem]);
     if ([shelf sealed]) Fail(@"the list already has a sealed: line; shelfsign writes that itself");
     shelf = [shelf shelfSealedAt:Now("%Y-%m-%d %H:%M:%S")];
 
-    SecKeyRef key = CopyPrivateKey();
-    if (key == NULL) Fail(@"the keychain has no Russian Shelf signing key (make keys)");
-    if (![PublicKeyInfo(key) isEqualToData:RSAppPublicKey()])
-        Fail(@"the keychain's key isn't the one built into the app: rebuild the app after make keys");
-
-    NSData *file = RSSealShelf(shelf, RSAppAESKey(), RandomBytes(16), ^NSData *(NSData *message, NSString **why) {
-        CFErrorRef error = NULL;
-        NSData *signature = (NSData *)SecKeyCreateSignature(key, kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
-                                                            (CFDataRef)message, &error);
-        if (signature == nil) *why = [NSString stringWithFormat:@"signing failed: %@", ErrorText(error)];
-        return [signature autorelease];
-    }, &problem);
+    SecKeyRef key = SigningKey();
+    NSData *file = RSSealShelf(shelf, RSAppAESKey(), RandomBytes(16), Signer(key), &problem);
     CFRelease(key);
     if (file == nil) Fail(problem);
 
@@ -188,6 +225,14 @@ static int Open(NSString *path)
     NSData *file = [NSData dataWithContentsOfFile:path];
     if (file == nil) Fail([NSString stringWithFormat:@"can't read %@", path]);
     NSString *problem = nil;
+    NSString *plain = RSOpenSealedText(file, RSAppAESKey(), RSAppPublicKey(), NULL, &problem);
+    if (plain == nil) Fail(problem);
+    if (RSTextIsReadingList(plain)) {
+        RSReadingSet *set = [RSReadingSet setWithText:plain problem:&problem];
+        if (set == nil) Fail(problem);
+        printf("%s", [[set text] UTF8String]);
+        return 0;
+    }
     RSShelf *shelf = RSOpenShelfFile(file, &problem);
     if (shelf == nil) Fail(problem);
     printf("%s", [[shelf text] UTF8String]);
@@ -206,7 +251,7 @@ int main(int argc, const char *argv[])
             return Pubkey();
         if ([command isEqualToString:@"keygen"] && argc == 3)
             return Keygen([NSString stringWithUTF8String:argv[2]]);
-        fprintf(stderr, "usage: shelfsign seal <list.txt> <shelf.signed>\n"
+        fprintf(stderr, "usage: shelfsign seal <list.txt> <shelf.signed>      (a shelf, or a reading list into reading.signed)\n"
                         "       shelfsign open <shelf.signed>\n"
                         "       shelfsign pubkey\n"
                         "       shelfsign keygen <RSKeys.c>\n");

@@ -79,6 +79,10 @@ static BOOL RSUnionLines(NSMutableArray *lines, NSArray *more)
           forKey:@"finished"];
     for (NSString *key in [NSArray arrayWithObjects:@"felt", @"want", nil])
         if (RSText(l, key) == nil && RSText(r, key)) [m setObject:RSText(r, key) forKey:key];
+    // The speed it was left at: this Mac's if it has one; the slowest: the slower.
+    if (RSNumber(l, @"rate") <= 0 && RSNumber(r, @"rate") > 0) [m setObject:[r objectForKey:@"rate"] forKey:@"rate"];
+    double ls = RSNumber(l, @"slowest"), rs = RSNumber(r, @"slowest");
+    if (rs > 0 && (ls <= 0 || rs < ls)) [m setObject:[r objectForKey:@"slowest"] forKey:@"slowest"];
     return m;
 }
 
@@ -137,6 +141,20 @@ static BOOL RSUnionLines(NSMutableArray *lines, NSArray *more)
         for (NSString *day in rs)
             if ([say objectForKey:day] == nil && RSDict([rs objectForKey:day])) [say setObject:[rs objectForKey:day] forKey:day];
         [out setObject:say forKey:@"say"];
+    }
+
+    // Readings, by key: the side with more reads; the same, the later day; the same, this Mac's.
+    NSDictionary *lr = RSDict([local objectForKey:@"readings"]), *rr = RSDict([remote objectForKey:@"readings"]);
+    if (rr) {
+        NSMutableDictionary *readings = lr ? [[lr mutableCopy] autorelease] : [NSMutableDictionary dictionary];
+        for (NSString *key in rr) {
+            NSDictionary *theirs = RSDict([rr objectForKey:key]), *mine = RSDict([readings objectForKey:key]);
+            if (![key isKindOfClass:[NSString class]] || theirs == nil) continue;
+            NSComparisonResult c = mine ? RSCompare(RSNumber(theirs, @"reads"), RSNumber(mine, @"reads")) : NSOrderedDescending;
+            if (c == NSOrderedSame) c = RSCompare(RSNumber(theirs, @"day"), RSNumber(mine, @"day"));
+            if (c == NSOrderedDescending) [readings setObject:theirs forKey:key];
+        }
+        [out setObject:readings forKey:@"readings"];
     }
     return out;
 }

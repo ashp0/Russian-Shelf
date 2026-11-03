@@ -122,10 +122,10 @@ Click a video (or select it with ↑ ↓ and press Return) to play it.
 | T | The transcript: every line, the one being spoken marked. Click a line to go there |
 | F | Full screen (or double-click the picture). Esc leaves it |
 | L | **Loop this line.** It plays, then waits as long as it took (at least a second and a half) for you to say it back, then plays again. ↓ shows it for the whole loop. L, Space or an arrow stops |
-| − | **Slower:** three-quarter speed, the voice's pitch kept. Again for full speed |
+| − = | **Slower, faster:** a ladder of 1.0, 0.9, 0.8, 0.7, 0.6 and 0.5, the voice's pitch kept (nothing under 0.5: there the words smear). The note says the speed ("0.6×"). A video reopens at the speed it was left at; the report carries the slowest ever chosen for it |
 | K | **Keep this line**, with its sound, as a card to hear again tomorrow and on later days (below) |
 | W | **A word.** A slip over the picture with the line's words as small cards, the rarest chosen first (the one you most likely don't know): its lemma with the stress marked, what kind of word, two or three English glosses, and where it stands in the frequency list (*common: 1,840th · less common: 6,200th · rare: past the common 10,000*). ← → choose a word (or click one), **K keeps the word** as a card with its line's sound, W or Esc closes |
-| C | **Today's clip** (below); C again leaves it |
+| C | **A clip from here** (below): from the line being said, two to three minutes on, whenever you want to shadow; C again leaves it |
 | H | **How was this video?** A slip at the top of the picture: *too easy · about right · too hard* and *more like this · less like this*. One click each, about the video, never a score; click a chosen word again to take it back, ✕ or H to put it away, or just ignore it (it goes by itself). It also comes up once by itself when the video is 90% watched, unless both are already chosen |
 
 Subtitles are off when an easy or natural video opens. A **fast** video opens
@@ -157,23 +157,40 @@ knowing: a new verb, a chunk you'd like to say yourself.
 ### Today's clip (⌘K)
 
 Two or three minutes of the week's fast video (or the natural one, or any
-with subtitles), chosen once a day: it starts at the line you asked for most
-help on in earlier viewings (replayed, shown, looped, looked up) that no
-earlier clip covered, else at the first line after the last clip worked, and
-ends on a sentence boundary. A ruled card at the top of the picture walks
-three passes (ten to fifteen minutes; the deliberate kind of listening:
-bottom-up decoding, shadowing, words met on purpose):
+with subtitles a person made), chosen once a day: it starts at the line you
+asked for most help on in earlier viewings (replayed, shown, looped, looked
+up) that no earlier clip covered, else at the first line after the last clip
+worked, and ends on a sentence boundary. A ruled card at the top of the
+picture walks three passes (ten to fifteen minutes; the deliberate kind of
+listening: bottom-up decoding, shadowing, words met on purpose):
 
 1. **Listen.** No text. The stretch plays twice.
-2. **Read.** Captions on; it pauses after each line. Space goes on, W looks a
-   word up, K keeps the line or the word, ↑ hears it again, − slows it.
-3. **Say along.** Each line once to hear, then again for you to speak over it.
-   **R** records your say-along through the built-in microphone and plays it
-   back after the speaker's line, so you hear the two next to each other.
+2. **Read.** Captions on; it pauses after each sentence. Space goes on, W
+   looks a word up, K keeps the sentence or the word, ↑ hears it again, − and
+   = change the speed.
+3. **Say along.** Each sentence once to hear, then again for you to speak
+   over it. **R** records your say-along through the built-in microphone and
+   plays it back after the speaker's, so you hear the two next to each other.
 
-Then: "Done. Another tomorrow." The desk card names the clip until its three
+The lines of passes 2 and 3 are whole sentences, or what one person said: a
+cue that doesn't end a sentence is joined with the next (at most two), so a
+line replayed with ↑ is one thing one person said. A **fast** video's clip
+climbs a speed ladder, 0.6× for the listening, 0.8× for the reading, full
+speed for the say-along (the research: let the listener set the rate, then
+fade it); − and = during a pass still override it; any other video's clip
+runs at full speed. Your say-along plays back at the speed you said it.
+
+Then: "Done." Shadowing isn't rationed: **C** in the player starts a clip
+from the line being said, whenever you like, and ⌘K after today's is done
+chooses the next stretch. The desk card names today's clip until its three
 passes are done; a clip half worked is picked up where it stopped. ← → or C
-leave the clip. Reports say which stretch and how far it got.
+leave the clip. Reports say which stretches and how far each got.
+
+Never on YouTube's automatic captions: their lines are cut every few words
+at arbitrary points, so they aren't what anyone said and say-along can't
+work on them. A video with only those gets no clip; the player says so when
+C is pressed, and the desk card names the video. The skill makes Russian
+subtitles for such a fast video and seals them with the shelf (below).
 
 ### Cards (⌘L)
 
@@ -239,9 +256,50 @@ microphone. After the third:
 | ⌘I | The islands, written on the card (⌘I or Esc keeps them) |
 | Esc | Close |
 
-Today's passes are kept until midnight. The last pass of the **first Say of
-each month** stays as the month's recording (`Say/Recordings/YYYY-MM.m4a`).
-Without a microphone the sand still runs and the card says so once.
+**Whenever you like, another round.** ↑ ↓ choose another topic (the islands
+in turn, after any retelling that's waiting) and Space starts a fresh round;
+the desk card counts only the day's first. When the topic retells one of the
+week's readings (Перескажи: «story»), a fourth, half-minute pass follows the
+three: the lesson in your own words, and then the story's own line to compare.
+
+**Every recording stays**, by day (`Say/Recordings/YYYY-MM-DD/`: the passes,
+a reading's reads aloud, recordings made on their own), none deleted, so you
+can hear this week next to last week and catch your own errors. **R** lists
+them, newest first: ↑ ↓ choose, Space plays, Tab names one, **N** records a
+new one on your own (up to fifteen minutes; Space or N stops), Esc comes
+back. The last pass of the **first Say of each month** also stays as the
+month's recording (`Say/Recordings/YYYY-MM.m4a`), the one that syncs between
+the Macs. Without a microphone the sand still runs and the card says so once.
+
+### Reading (⌘D)
+
+Six short stories a week, each with a life lesson, and a poem, written by
+Claude on the MacBook from the words you've met on the shelf (the videos'
+subtitles and the words you kept: at least 95% known running words, 5–8 new
+ones used three times or more) and sealed with the shelf
+(`Russian/reading.signed`, below), so you can't add or change them. The
+stories take the shape Sergey's tales do (Жил-был… / Однажды…, the problem,
+three tries, the turn, the end, Мораль: …), on the topics of your islands and
+of student life; after three of the owner's own rhymed fables come real ones,
+Крылов first. Stress marks on every word of two syllables or more.
+
+One a day from the week's start, the poem last and staying up until next
+week's arrive; ← → open the week's others. The day's reading is on the desk
+card ("Read"), and comes up on a sheet of paper in Georgia. **Three reads,**
+the way a clip has three passes:
+
+1. **Silently,** at any pace. Click a word and **W** looks it up (the slip
+   from the player: lemma with its stress, kind, glosses, rank; ← → along the
+   sentence); **K** keeps it as a card with its sentence, to read aloud when
+   it comes back. **A** hides the stress marks, and shows them again.
+2. **Aloud, recorded.**
+3. **Aloud again, recorded;** then Space plays read 2, then read 3, so you
+   hear the difference.
+
+Space starts a read and ends it. The sheet shows "read 2 of 3" and the
+read's own clock; the time of each read goes to the report only (the research
+wants rereads, not a timer: repeated reading is what builds rate and
+fluency). After the third read, Say offers to retell the story (⌘S).
 
 ## How the shelf gets here
 
@@ -269,6 +327,43 @@ video: ...
 One to twelve `video:` lines, `id | channel | title`, in order. The title may
 contain ` | `. `#` lines are comments. `shelfsign` adds `sealed: <date time>`
 itself.
+
+A `subtitles: <id> <sha-256 in hex>` line seals a Russian subtitle file the
+skill made for a fast video whose own track doesn't match the speech (Easy
+Russian's subtitles are burned into the picture; YouTube's automatic captions
+aren't what anyone said). The file goes in `Russian/Subtitles/<id>.vtt`
+(ordinary WebVTT, a sentence or a turn a cue); the app takes it only while
+its hash is the sealed one, checked again every time it's read, and uses it
+over the downloaded track for captions, the transcript and the clip.
+
+### The readings
+
+```
+Russian Reading 1
+start: 2026-11-09
+story: 1 | Че́стный студе́нт | Че́стность доро́же оце́нки.
+new: обману́ть, экза́мен
+Жил-был студе́нт. Он учи́лся в университе́те…
+
+Но вдруг… экза́мен!
+story: 2 | …
+poem: Стрекоза́ и Мураве́й | Ива́н Крыло́в, 1808 | Кто ле́том поёт, тот зимо́й голода́ет.
+metre: четырёхстопный хорей, парная рифма
+Попрыгу́нья Стрекоза́
+Ле́то кра́сное пропе́ла;
+```
+
+A `story: number | title | lesson` or `poem: title | by | lesson` line begins
+a reading (stories count 1, 2, 3…; the lesson in one line, as it will be
+retold); `new:` lists its new words, `metre:` a poem's metre and rhyme in a
+few words; everything up to the next reading is its text (a story's lines run
+together into paragraphs at blank lines; a poem keeps its lines). Stress
+marks are the combining acute (U+0301). At most seven readings, each up to
+8,000 characters. `shelfsign seal readings.txt Russian/reading.signed` seals
+it exactly as a shelf (the same key, the same sealed file format: the inside
+says which it is), and the app takes it by the shelves' rules: newer only, an
+early one waiting for its start day. Each reading's key is
+`<start>-<number>` (`2026-11-09-3`); its words kept are cards under that key.
 
 ### Sealing
 
@@ -345,8 +440,11 @@ Everything lives in `~/Library/Application Support/Russian Shelf/`, not
 | | |
 | --- | --- |
 | `Shelf.signed`, `Next Shelf.signed` | the shelves, as they arrived |
-| `State.plist` | how far each video has been watched; why the last shelf was turned away |
+| `Reading.signed`, `Next Reading.signed` | the week's readings and the next week's, as they arrived |
+| `State.plist` | how far each video has been watched, at what speed; clips, Say rounds and reads; why the last shelf or readings were turned away |
 | `Videos/<id>/` | `video.mp4`, `subtitles.vtt`, `thumbnail.jpg`, `info.plist` |
+| `Subtitles/<id>.vtt` | subtitles the skill made, taken from `Russian/Subtitles/` only while their SHA-256 is the one sealed in the shelf |
+| `Say/` | `Islands.txt`, `Tutor.txt`, `Recordings/YYYY-MM-DD/` (every recording, kept) and `Recordings/YYYY-MM.m4a` (the month's) |
 | `Downloads/<id>/` | a download in progress |
 | `yt-dlp`, `Cache/`, `Logs/` | the downloader, its cache, the last run's output per video, and what git said the last time a report was sent (`report.log`) |
 | `Outbox/` | reports not sent yet |
@@ -429,7 +527,7 @@ abcdefghijk | partly | 4:10 of 11:30 | The Fox and the Crane
 lmnopqrstuv | not started | 0:00 of 9:12 | ...
 
 Help (shown, heard again, looped, slowed, transcript, subtitles, looked up, kept):
-JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | looked up 3 | kept 2
+JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | looked up 3 | kept 2 | slowest 0.6
 
 How it felt (the owner's own choice, about the video):
 JE4cI_Knzvc | about right | more like this
@@ -448,6 +546,13 @@ JE4cI_Knzvc | 4:10 | отрезала (отре́зать) | cut off | in: Он�
 
 Said (day | topic | passes of 3 | recorded):
 2026-10-14 | Мой день | passes 3 | recorded
+2026-10-14 | Еда | passes 3 | recorded | round 2
+
+Read (day | story | reads of 3 | times | recorded):
+2026-10-14 | Честный студент | reads 3 | 4:10 · 3:05 · 2:50 | recorded
+
+Reading words kept (word (lemma) | gloss | the sentence):
+2026-10-12-1 | обмануть (обману́ть) | deceive | in: Но Вася не хотел обмануть учителя.
 
 For the tutor:
 ## 2026-10-14

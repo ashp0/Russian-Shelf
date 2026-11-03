@@ -1477,4 +1477,195 @@ static void RSDrawSandGlass(NSRect box, double fraction)
     }
 }
 
+// ---- The recordings list (RSSayWindow, R) -------------------------------------
+
+static const CGFloat RSSayRowHeight = 24;
+
+static NSRect RSSayListRows(NSRect rect)
+{
+    NSRect card = RSSayCard(rect);
+    CGFloat ruleY = NSMaxY(card) - 44;
+    return NSMakeRect(NSMinX(card) + 24, NSMinY(card) + 34, NSWidth(card) - 48, ruleY - 12 - (NSMinY(card) + 34));
+}
+
++ (NSUInteger)sayListCapacityIn:(NSRect)rect
+{
+    return (NSUInteger)MAX(1, floor(NSHeight(RSSayListRows(rect)) / RSSayRowHeight));
+}
+
++ (NSInteger)sayListRowAtPoint:(NSPoint)p in:(NSRect)rect first:(NSUInteger)first count:(NSUInteger)count
+{
+    NSRect rows = RSSayListRows(rect);
+    if (!NSPointInRect(p, rows)) return -1;
+    NSInteger i = (NSInteger)floor((NSMaxY(rows) - p.y) / RSSayRowHeight) + (NSInteger)first;
+    return i >= 0 && (NSUInteger)i < count ? i : -1;
+}
+
++ (void)drawSayListIn:(NSRect)rect heading:(NSString *)heading rows:(NSArray *)rows selected:(NSInteger)selected
+                first:(NSUInteger)first recording:(BOOL)recording playing:(NSInteger)playing note:(NSString *)note keys:(NSArray *)keys
+{
+    CGFloat bar = [self hintBarHeight];
+    NSRect wall = rect;
+    wall.origin.y += bar;
+    wall.size.height -= bar;
+    RSDrawBack(wall);
+    RSDrawCastShadow(wall, 10);
+    RSDrawPlank(NSMakeRect(NSMinX(wall), NSMinY(wall), NSWidth(wall), RSPlankHeight));
+    [self drawHintBarIn:RSBottomStrip(rect, bar) items:keys];
+
+    NSRect card = RSSayCard(rect);
+    RSDrawCard(card, 0, YES);
+    CGFloat pad = 24, width = NSWidth(card) - 2 * pad;
+    CGFloat ruleY = NSMaxY(card) - 44;
+    [RSRGB(0xe08a8a, 0.85) set];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(card) + 1, ruleY, NSWidth(card) - 2, 1), NSCompositeSourceOver);
+    NSDictionary *h = RSText(RSSerifBold(16), RSInk(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+    RSDrawText(heading ?: @"", h, NSMakeRect(NSMinX(card) + pad, ruleY + 10, width, 22));
+    if (recording) {
+        NSRect lamp = NSMakeRect(NSMaxX(card) - pad - 12, ruleY + 14, 12, 12);
+        [NSGraphicsContext saveGraphicsState];
+        RSShadowOn(0, 3, 0.4);
+        [RSRGB(0xd0302a, 1) set];
+        [[NSBezierPath bezierPathWithOvalInRect:lamp] fill];
+        [NSGraphicsContext restoreGraphicsState];
+    }
+
+    NSRect area = RSSayListRows(rect);
+    NSUInteger capacity = [self sayListCapacityIn:rect];
+    if ([rows count] == 0) {
+        NSDictionary *m = RSText(RSSerif(15), RSInkSoft(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+        NSString *empty = @"Nothing recorded yet.\nA Say pass, a reading aloud, or N here.";
+        CGFloat mh = RSHeightOf(empty, m, NSWidth(area) - 40);
+        RSDrawText(empty, m, NSMakeRect(NSMinX(area) + 20, round(NSMidY(area) - mh / 2), NSWidth(area) - 40, mh));
+    }
+    NSDictionary *dayText = RSText(RSSerifItalic(12.5), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByClipping);
+    NSDictionary *lengthText = RSText(RSFont(11), RSInkFaint(), NSRightTextAlignment, NSLineBreakByClipping);
+    for (NSUInteger i = first; i < [rows count] && i < first + capacity; i++) {
+        NSArray *row = [rows objectAtIndex:i];
+        NSRect r = NSMakeRect(NSMinX(area), NSMaxY(area) - RSSayRowHeight * (i - first + 1), NSWidth(area), RSSayRowHeight);
+        BOOL chosen = (NSInteger)i == selected;
+        if (chosen) {
+            [RSRGB(0xffffff, 0.55) set];
+            NSRectFillUsingOperation(NSInsetRect(r, -6, 1), NSCompositeSourceOver);
+            [RSRGB(0x1f3f8a, 0.35) set];
+            NSFrameRectWithWidth(NSInsetRect(r, -6, 1), 1);
+        }
+        [RSRGB(0xa9c4e0, 0.45) set];
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(r), NSMinY(r), NSWidth(r), 1), NSCompositeSourceOver);
+        NSString *day = [row count] > 0 ? [row objectAtIndex:0] : @"", *label = [row count] > 1 ? [row objectAtIndex:1] : @"";
+        NSString *length = [row count] > 2 ? [row objectAtIndex:2] : @"";
+        RSDrawText(day, dayText, NSMakeRect(NSMinX(r), NSMinY(r) + 4, 92, 17));
+        NSDictionary *lt = RSText(chosen ? RSSerifBold(14) : RSSerif(14), (NSInteger)i == playing ? RSRGB(0x1f3f8a, 1) : RSInk(),
+                                  NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText((NSInteger)i == playing ? [@"▶ " stringByAppendingString:label] : label, lt, NSMakeRect(NSMinX(r) + 96, NSMinY(r) + 3, NSWidth(r) - 96 - 54, 18));
+        RSDrawText(length, lengthText, NSMakeRect(NSMaxX(r) - 50, NSMinY(r) + 5, 50, 15));
+    }
+    if ([rows count] > capacity) {
+        NSDictionary *more = RSText(RSSerifItalic(11), RSInkFaint(), NSRightTextAlignment, NSLineBreakByClipping);
+        RSDrawText([NSString stringWithFormat:@"%lu of %lu  ↑ ↓", (unsigned long)MIN([rows count], first + capacity), (unsigned long)[rows count]], more,
+                   NSMakeRect(NSMinX(area), NSMinY(area) - 18, NSWidth(area), 15));
+    }
+    if ([note length]) {
+        NSDictionary *nt = RSText(RSSerifItalic(12), RSRibbon(), NSCenterTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText(note, nt, NSMakeRect(NSMinX(card) + pad, NSMinY(card) + 12, width, 16));
+    }
+}
+
+// ---- Reading (RSReadingWindow) --------------------------------------------------
+//
+// A larger sheet than the index cards: paper with the title across the top,
+// the text in Georgia below (an NSTextView, so a word can be clicked), and
+// the read's instruction and clock along the foot.
+
++ (NSSize)readingWindowSize { return NSMakeSize(760, 620); }
+
+static NSRect RSReadingSheet(NSRect rect)
+{
+    CGFloat bar = [RSStyle hintBarHeight];
+    NSRect wall = rect;
+    wall.origin.y += bar;
+    wall.size.height -= bar;
+    return NSMakeRect(NSMinX(wall) + 36, NSMinY(wall) + RSPlankHeight + 6, NSWidth(wall) - 72, NSHeight(wall) - RSPlankHeight - 6 - 22);
+}
+
++ (NSRect)readingTextRectIn:(NSRect)rect
+{
+    NSRect sheet = RSReadingSheet(rect);
+    return NSMakeRect(NSMinX(sheet) + 30, NSMinY(sheet) + 62, NSWidth(sheet) - 60, NSHeight(sheet) - 62 - 70);
+}
+
++ (NSRect)readingClockAreaIn:(NSRect)rect
+{
+    NSRect sheet = RSReadingSheet(rect);
+    return NSMakeRect(NSMaxX(sheet) - 30 - 120, NSMinY(sheet) + 14, 120, 40);
+}
+
++ (NSDictionary *)readingTextAttributes
+{
+    NSMutableParagraphStyle *p = [[[NSMutableParagraphStyle alloc] init] autorelease];
+    [p setLineSpacing:5];
+    [p setParagraphSpacing:10];
+    return [NSDictionary dictionaryWithObjectsAndKeys:RSSerif(19), NSFontAttributeName, RSInk(), NSForegroundColorAttributeName,
+            p, NSParagraphStyleAttributeName, nil];
+}
+
++ (void)styleReadingTextView:(NSTextView *)view
+{
+    [view setDrawsBackground:NO];
+    [view setEditable:NO];
+    [view setSelectable:YES];
+    [view setRichText:NO];
+    [view setFont:RSSerif(19)];
+    [view setTextColor:RSInk()];
+    [view setInsertionPointColor:RSRGB(0x1f3f8a, 1)];
+    [view setTextContainerInset:NSMakeSize(0, 4)];
+    [view setSelectedTextAttributes:[NSDictionary dictionaryWithObjectsAndKeys:RSRGB(0xf6e08a, 0.75), NSBackgroundColorAttributeName, nil]];
+}
+
++ (void)drawReadingIn:(NSRect)rect title:(NSString *)title about:(NSString *)about instruction:(NSString *)instruction
+                clock:(NSString *)clock recording:(BOOL)recording note:(NSString *)note keys:(NSArray *)keys
+{
+    CGFloat bar = [self hintBarHeight];
+    NSRect wall = rect;
+    wall.origin.y += bar;
+    wall.size.height -= bar;
+    RSDrawBack(wall);
+    RSDrawCastShadow(wall, 10);
+    RSDrawPlank(NSMakeRect(NSMinX(wall), NSMinY(wall), NSWidth(wall), RSPlankHeight));
+    [self drawHintBarIn:RSBottomStrip(rect, bar) items:keys];
+
+    NSRect sheet = RSReadingSheet(rect);
+    RSDrawCard(sheet, 0.25, YES);
+    CGFloat pad = 30, width = NSWidth(sheet) - 2 * pad;
+    // The title, and under it what this reading is; a thin rule under both.
+    NSDictionary *t = RSText(RSSerifBold(21), RSInk(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+    RSDrawText(title ?: @"", t, NSMakeRect(NSMinX(sheet) + pad, NSMaxY(sheet) - 40, width, 28));
+    NSDictionary *a = RSText(RSSerifItalic(12.5), RSInkSoft(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+    RSDrawText(about ?: @"", a, NSMakeRect(NSMinX(sheet) + pad, NSMaxY(sheet) - 58, width, 16));
+    [RSRGB(0x8a7a5c, 0.5) set];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(sheet) + pad, NSMaxY(sheet) - 64, width, 1), NSCompositeSourceOver);
+    // The foot: the instruction on the left, the clock on the right.
+    NSRect text = [self readingTextRectIn:rect];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(sheet) + pad, NSMinY(text) - 8, width, 1), NSCompositeSourceOver);
+    NSRect clockArea = [self readingClockAreaIn:rect];
+    NSDictionary *it = RSText(RSSerif(14.5), RSInk(), NSLeftTextAlignment, NSLineBreakByWordWrapping);
+    RSDrawText(instruction ?: @"", it, NSMakeRect(NSMinX(sheet) + pad, NSMinY(sheet) + 30, width - 130, 40));
+    if ([clock length]) {
+        NSDictionary *ct = RSText(RSSerifBold(20), recording ? RSRGB(0xb3261e, 1) : RSInk(), NSRightTextAlignment, NSLineBreakByClipping);
+        RSDrawText(clock, ct, NSMakeRect(NSMinX(clockArea), NSMinY(clockArea) + 8, NSWidth(clockArea), 26));
+        if (recording) {
+            NSRect lamp = NSMakeRect(NSMinX(clockArea) - 2, NSMinY(clockArea) + 15, 12, 12);
+            [NSGraphicsContext saveGraphicsState];
+            RSShadowOn(0, 3, 0.4);
+            [RSRGB(0xd0302a, 1) set];
+            [[NSBezierPath bezierPathWithOvalInRect:lamp] fill];
+            [NSGraphicsContext restoreGraphicsState];
+        }
+    }
+    if ([note length]) {
+        NSDictionary *nt = RSText(RSSerifItalic(12), RSRibbon(), NSLeftTextAlignment, NSLineBreakByTruncatingTail);
+        RSDrawText(note, nt, NSMakeRect(NSMinX(sheet) + pad, NSMinY(sheet) + 10, width, 16));
+    }
+}
+
 @end

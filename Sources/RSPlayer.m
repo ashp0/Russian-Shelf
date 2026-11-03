@@ -4,6 +4,7 @@
 #import "RSShelf.h"
 #import "RSDictionary.h"
 #import "RSReport.h"
+#import "RSClips.h"
 
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -14,7 +15,27 @@ static const double RSRevealAtLeast = 2.0;     // a revealed line stays at least
 static const double RSReportEvery = 5;          // seconds of wall time between position reports
 static const double RSUserScrollQuiet = 5;      // after the reader scrolls the transcript, leave it alone
 static const CGFloat RSControlBarHeight = 48;   // AVPlayerView's inline controls, along the bottom of the picture
-static const float RSSlowerRate = 0.75;         // "slower": three-quarter speed
+const float RSPlayerRates[] = { 1.0f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f };
+const NSUInteger RSPlayerRateCount = sizeof RSPlayerRates / sizeof RSPlayerRates[0];
+
+static NSUInteger RSRateIndex(float rate)
+{
+    NSUInteger best = 0;
+    for (NSUInteger i = 1; i < RSPlayerRateCount; i++)
+        if (fabsf(RSPlayerRates[i] - rate) < fabsf(RSPlayerRates[best] - rate)) best = i;
+    return best;
+}
+
+float RSPlayerRateOnLadder(float rate)
+{
+    if (!(rate > 0.25f && rate <= 1.0f)) return 1;
+    return RSPlayerRates[RSRateIndex(rate)];
+}
+
+NSString *RSPlayerRateText(float rate)
+{
+    return rate >= 0.999f ? @"Full speed." : [NSString stringWithFormat:@"%.1f\u00d7", rate];
+}
 static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line, to say it back (seconds)
 
 @class RSPlayer;
@@ -450,16 +471,18 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     RSClipCardView *_clipCard;
     RSClipPass _clipPass;
     double _clipStart, _clipEnd;
-    NSUInteger _clipFirst, _clipLast, _clipLine;   // the lines of the stretch; the one under way
+    NSUInteger _clipFirst, _clipLast, _clipLine;   // the lines of the stretch; the unit under way
+    NSArray *_clipUnits;                            // the stretch as sentences or turns (RSLine), for the read and say-along passes
     NSUInteger _clipPlays;                          // pass 1: whole plays done; pass 3: plays of this line
     BOOL _clipWaiting;                              // pass 2: paused after a line, for Space
     BOOL _recordSayAlong;
     AVAudioRecorder *_recorder;
     AVAudioPlayer *_playback;
     CFAbsoluteTime _clipSeekAt;
+    float _clipRateBefore;                          // the speed to go back to when the clip is left
     NSArray *_slipWords;            // the words of the line the slip is about
     NSArray *_slipEntries;          // RSDictionaryEntry or NSNull, one a word
-    NSUInteger _slipLine;           // which line
+    RSLine *_slipLine, *_slipBefore;   // the line the slip is about (a clip unit, or a subtitle line) and the one before it
     NSInteger _slipSelection;
     NSString *_felt, *_want;
     BOOL _feedbackOffered;
@@ -565,7 +588,6 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_clipCard setHidden:YES];
     [content addSubview:_clipCard];
     _slipSelection = -1;
-    _slipLine = NSNotFound;
     // Asked once a visit, at 90%, unless it was answered or watched to there before.
     _feedbackOffered = duration > 0 && furthest >= 0.9 * duration;
 
@@ -608,6 +630,9 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_playback release];
     [_slipWords release];
     [_slipEntries release];
+    [_slipLine release];
+    [_slipBefore release];
+    [_clipUnits release];
     [_dictionary release];
     [_felt release];
     [_want release];
@@ -737,6 +762,19 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     return _rate < 1;
 }
 
+- (float)rate
+{
+    return _rate;
+}
+
+// Before -show: the speed the video was left at last time.
+- (void)setRate:(float)rate
+{
+    _rate = RSPlayerRateOnLadder(rate);
+    if ([self playing]) [self play];
+    [self updateHints];
+}
+
 - (BOOL)looping
 {
     return _loopIndex != NSNotFound;
@@ -860,7 +898,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 {
     NSString *caption = nil;
     NSArray *lines = [_subtitles lines];
-    if (_revealIndex != NSNotFound && _revealIndex < [lines count]) {
+    // Reading and saying along: the unit under way (a whole sentence, or
+    // what one person said) stays up through its plays and the pause after.
+    if ((_clipPass == RSClipRead || _clipPass == RSClipSay) && [self clipLine]) caption = [[self clipLine] text];
+    else if (_revealIndex != NSNotFound && _revealIndex < [lines count]) {
         RSLine *line = [lines objectAtIndex:_revealIndex];
         // Shown while it's said (at least two seconds), or all through a loop of it.
         if (_revealIndex == _loopIndex) caption = [line text];
@@ -1064,14 +1105,29 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [self play];
 }
 
-- (void)toggleSlower
+// One step down (direction < 0) or up the ladder. Counted as help the first
+// step below full speed; every step is told to the controller, which
+// remembers it for the video.
+- (void)stepRate:(int)direction
 {
-    _rate = _rate < 1 ? 1 : RSSlowerRate;
+    NSUInteger i = RSRateIndex(_rate);
+    if (direction > 0 && i == 0) { [self showNote:@"Full speed already." for:1.2]; return; }
+    if (direction < 0 && i + 1 >= RSPlayerRateCount) {
+        [self showNote:@"0.5\u00d7 is the slowest: below that the words stop sounding like speech." for:2.5];
+        return;
+    }
+    BOOL wasFull = _rate >= 1;
+    _rate = RSPlayerRates[direction > 0 ? i - 1 : i + 1];
     if ([self playing]) [self play];
-    if (_rate < 1) [_delegate player:self helped:RSHelpSlowed line:[self lineAt:[self currentTime]]];
-    [self showNote:_rate < 1 ? @"Three-quarter speed." : @"Full speed." for:1.2];
+    if (wasFull && _rate < 1) [_delegate player:self helped:RSHelpSlowed line:[self lineAt:[self currentTime]]];
+    [_delegate player:self rateChanged:_rate];
+    [self showNote:RSPlayerRateText(_rate) for:1.2];
+    [self updateClipCard];
     [self updateHints];
 }
+
+- (void)stepSlower { [self stepRate:-1]; }
+- (void)stepFaster { [self stepRate:1]; }
 
 // The line being said at t, or the one just said; nil if none.
 - (RSLine *)lineAt:(double)t
@@ -1144,17 +1200,34 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [self chooseFeedback:[choices objectAtIndex:(NSUInteger)item]];
 }
 
+// The line a key works on: the clip's unit while reading or saying along
+// (a whole sentence), else the subtitle line being said or just said; nil
+// if none. *before: the line before it, for context.
+- (RSLine *)workingLineAt:(double)t before:(RSLine **)before
+{
+    if (before) *before = nil;
+    if ((_clipPass == RSClipRead || _clipPass == RSClipSay) && [self clipLine]) {
+        if (before && _clipLine > 0) *before = [_clipUnits objectAtIndex:_clipLine - 1];
+        return [self clipLine];
+    }
+    NSUInteger i = [self lineMeantAt:t];
+    NSArray *lines = [_subtitles lines];
+    if (i == NSNotFound || i >= [lines count]) return nil;
+    if (before && i > 0) *before = [lines objectAtIndex:i - 1];
+    return [lines objectAtIndex:i];
+}
+
 - (void)keepLine
 {
     if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles, so there’s no line to keep." for:2.5]; return; }
     double t = [self currentTime];
-    NSUInteger i = [self lineMeantAt:t];
-    if (i == NSNotFound) { [self showNote:@"Nothing is being said just now." for:1.5]; return; }
-    NSArray *lines = [_subtitles lines];
-    NSString *said = [_delegate player:self keepLine:[lines objectAtIndex:i] before:i > 0 ? [lines objectAtIndex:i - 1] : nil];
+    RSLine *before = nil;
+    RSLine *line = [self workingLineAt:t before:&before];
+    if (line == nil) { [self showNote:@"Nothing is being said just now." for:1.5]; return; }
+    NSString *said = [_delegate player:self keepLine:line before:before];
     // Show what was kept.
-    _revealIndex = i;
-    _revealAt = t;
+    NSUInteger i = [self lineMeantAt:t];
+    if (i != NSNotFound) { _revealIndex = i; _revealAt = t; }
     [self showNote:said for:2.5];
 }
 
@@ -1170,7 +1243,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     _slipWords = nil;
     [_slipEntries release];
     _slipEntries = nil;
-    _slipLine = NSNotFound;
+    [_slipLine release];
+    _slipLine = nil;
+    [_slipBefore release];
+    _slipBefore = nil;
     _slipSelection = -1;
     [self updateHints];
 }
@@ -1179,13 +1255,17 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 {
     if ([self wordSlipShown]) { [self hideWordSlip]; return; }
     if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles, so there are no words to look up." for:2.5]; return; }
-    NSUInteger i = [self lineMeantAt:[self currentTime]];
-    if (i == NSNotFound) { [self showNote:@"Nothing is being said just now." for:1.5]; return; }
-    RSLine *line = [[_subtitles lines] objectAtIndex:i];
+    RSLine *before = nil;
+    RSLine *line = [self workingLineAt:[self currentTime] before:&before];
+    if (line == nil) { [self showNote:@"Nothing is being said just now." for:1.5]; return; }
     NSArray *words = RSWordsInLine([line text]);
     if ([words count] == 0) { [self showNote:@"No Russian words in this line." for:1.5]; return; }
     [self hideFeedback];
-    _slipLine = i;
+    [_slipLine release];
+    _slipLine = [line retain];
+    [_slipBefore release];
+    _slipBefore = [before retain];
+    NSUInteger i = [self lineMeantAt:[self currentTime]];
     [_slipWords release];
     _slipWords = [words copy];
     NSMutableArray *entries = [NSMutableArray array];
@@ -1206,8 +1286,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_slipView setHidden:NO];
     [self chooseSlipWord:rarest];
     // Shown while the slip is open, so the word can be read in its line.
-    _revealIndex = i;
-    _revealAt = [self currentTime];
+    if (i != NSNotFound) { _revealIndex = i; _revealAt = [self currentTime]; }
     [self updateCaptionAt:[self currentTime]];
     [_delegate player:self helped:RSHelpLookedUp line:line];
     [self updateHints];
@@ -1230,12 +1309,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 
 - (void)keepSlipWord
 {
-    if (![self wordSlipShown] || _slipSelection < 0 || _slipLine >= [[_subtitles lines] count]) return;
+    if (![self wordSlipShown] || _slipSelection < 0 || _slipLine == nil) return;
     id e = [_slipEntries objectAtIndex:(NSUInteger)_slipSelection];
-    NSArray *lines = [_subtitles lines];
     NSString *said = [_delegate player:self keepWord:[_slipWords objectAtIndex:(NSUInteger)_slipSelection]
-                                 entry:e == [NSNull null] ? nil : e line:[lines objectAtIndex:_slipLine]
-                                before:_slipLine > 0 ? [lines objectAtIndex:_slipLine - 1] : nil];
+                                 entry:e == [NSNull null] ? nil : e line:_slipLine before:_slipBefore];
     [self showNote:said for:2.5];
 }
 
@@ -1256,6 +1333,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 {
     NSArray *lines = [_subtitles lines];
     if ([lines count] == 0) { [self showNote:@"This video has no Russian subtitles, so there is no clip to work." for:2.5]; return; }
+    if ([_subtitles automatic]) {
+        [self showNote:@"Only YouTube’s automatic captions: their lines wouldn’t match the speech, so there’s no clip of this video." for:4];
+        return;
+    }
     [self stopLoop];
     [self hideWordSlip];
     [self hideFeedback];
@@ -1268,9 +1349,41 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
         if ([line start] < end - 0.05) _clipLast = i;
     }
     if (_clipFirst == NSNotFound || _clipLast < _clipFirst) { [self showNote:@"No lines in that stretch." for:2]; return; }
+    [_clipUnits release];
+    _clipUnits = [[_subtitles sentencesFrom:_clipFirst to:_clipLast] copy];
     [_clipCard setSpan:[NSString stringWithFormat:@"%@–%@", RSClock(start), RSClock(end)]];
     [_clipCard setHidden:NO];
+    _clipRateBefore = _rate;
     [self beginClipPass:RSClipListen];
+}
+
+- (void)startClipHere
+{
+    if (_clipPass) return;
+    if ([[_subtitles lines] count] == 0) { [self showNote:@"This video has no Russian subtitles, so there is no clip to work." for:2.5]; return; }
+    if ([_subtitles automatic]) {
+        [self showNote:@"Only YouTube’s automatic captions: their lines wouldn’t match the speech, so there’s no clip of this video." for:4];
+        return;
+    }
+    NSUInteger i = [_subtitles indexToReplayAtTime:[self currentTime]];
+    if (i == NSNotFound) i = 0;
+    RSClipPlan *plan = RSClipFromLine(_identifier, _subtitles, i);
+    if (plan == nil) { [self showNote:@"Nothing left to work from here." for:2]; return; }
+    [_delegate player:self clipFrom:[plan start] to:[plan end] passes:0];
+    [self startClipFrom:[plan start] to:[plan end]];
+}
+
+// The speed a clip pass starts at: a fast video's clip climbs 0.6, 0.8, 1.0
+// (slow enough to catch the words, ending at the speed people speak); any
+// other video's runs at full speed. − and = during a pass still override it.
+- (float)clipRateForPass:(RSClipPass)pass
+{
+    if (![_kind isEqualToString:RSKindFast]) return 1;
+    switch (pass) {
+        case RSClipListen: return 0.6f;
+        case RSClipRead:   return 0.8f;
+        default:           return 1;
+    }
 }
 
 - (void)beginClipPass:(RSClipPass)pass
@@ -1278,9 +1391,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     _clipPass = pass;
     _clipPlays = 0;
     _clipWaiting = NO;
-    _clipLine = _clipFirst;
+    _clipLine = 0;
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(clipNextLine) object:nil];
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(clipSecondPlay) object:nil];
+    if (pass != RSClipDone) _rate = [self clipRateForPass:pass];
     switch (pass) {
         case RSClipListen:
             [self setSubtitlesOn:NO];
@@ -1291,13 +1405,13 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
         case RSClipRead:
             [self setSubtitlesOn:YES];
             [_delegate player:self clipFrom:_clipStart to:_clipEnd passes:1];
-            [self clipSeekTo:[(RSLine *)[[_subtitles lines] objectAtIndex:_clipLine] start]];
+            [self clipSeekTo:[[self clipLine] start]];
             [self play];
             break;
         case RSClipSay:
             [self setSubtitlesOn:YES];
             [_delegate player:self clipFrom:_clipStart to:_clipEnd passes:2];
-            [self clipSeekTo:[(RSLine *)[[_subtitles lines] objectAtIndex:_clipLine] start]];
+            [self clipSeekTo:[[self clipLine] start]];
             [self play];
             break;
         case RSClipDone:
@@ -1330,19 +1444,20 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
             break;
         case RSClipRead:
             what = _clipWaiting ? @"Read the line. Then Space for the next." : @"Read along. It pauses after each line.";
-            keys = @"Space on   W a word   K keep   ↑ hear it again   − slower";
+            keys = @"Space on   W a word   K keep   ↑ hear it again   − = speed";
             break;
         case RSClipSay:
             what = _clipPlays == 0 ? @"Hear the line." : @"Now say it along with the speaker.";
-            keys = _recordSayAlong ? @"R stop recording   − slower   C leave" : @"R record your say-along   − slower   C leave";
+            keys = _recordSayAlong ? @"R stop recording   − = speed   C leave" : @"R record your say-along   − = speed   C leave";
             break;
         case RSClipDone:
-            what = @"Done. Another tomorrow.";
+            what = @"Done. Another from wherever you are: C, whenever you like.";
             keys = @"Space plays on   C or Esc closes the card";
             break;
         case RSClipOff:
             break;
     }
+    if (what && _rate < 1 && _clipPass != RSClipDone) what = [what stringByAppendingFormat:@"  (%.1f\u00d7)", _rate];
     [_clipCard setPass:_clipPass];
     [_clipCard setInstruction:what];
     [_clipCard setKeys:keys];
@@ -1359,6 +1474,9 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     [_playback stop];
     _clipPass = RSClipOff;
     _clipWaiting = NO;
+    // Back to the speed the video had before the clip's own.
+    _rate = _clipRateBefore > 0 ? _clipRateBefore : 1;
+    if ([self playing]) [self play];
     [_clipCard setHidden:YES];
     [self layout];
     [self updateHints];
@@ -1375,8 +1493,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
 
 - (RSLine *)clipLine
 {
-    NSArray *lines = [_subtitles lines];
-    return _clipLine < [lines count] ? [lines objectAtIndex:_clipLine] : nil;
+    return _clipLine < [_clipUnits count] ? [_clipUnits objectAtIndex:_clipLine] : nil;
 }
 
 - (void)clipAt:(double)t
@@ -1396,9 +1513,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     if (t < [line end] + 0.05) return;
     [_player pause];
     if (_clipPass == RSClipRead) {
-        _clipWaiting = YES;
-        _revealIndex = _clipLine;          // the line stays up while it's read
-        _revealAt = t;
+        _clipWaiting = YES;             // the unit stays up while it's read (updateCaptionAt)
         [self updateCaptionAt:t];
         [self updateClipCard];
         return;
@@ -1430,7 +1545,7 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     if (_closed || _clipPass == RSClipOff) return;
     _clipWaiting = NO;
     _clipPlays = 0;
-    if (_clipLine >= _clipLast) { [self beginClipPass:_clipPass == RSClipRead ? RSClipSay : RSClipDone]; return; }
+    if (_clipLine + 1 >= [_clipUnits count]) { [self beginClipPass:_clipPass == RSClipRead ? RSClipSay : RSClipDone]; return; }
     _clipLine++;
     if (_clipPass == RSClipRead) { _revealIndex = NSNotFound; [self setSubtitlesOn:YES]; }
     [self clipSeekTo:[[self clipLine] start]];
@@ -1494,6 +1609,8 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
         _clipEnd = [(RSLine *)[lines lastObject] end];
         _clipFirst = 0;
         _clipLast = [lines count] - 1;
+        [_clipUnits release];
+        _clipUnits = [[_subtitles sentencesFrom:_clipFirst to:_clipLast] copy];
         [_clipCard setSpan:[NSString stringWithFormat:@"%@–%@", RSClock(_clipStart), RSClock(_clipEnd)]];
         [_clipCard setHidden:NO];
     }
@@ -1513,10 +1630,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
         @"↓", @"Show line",
         @"↑", @"Again",
         @"L", [self looping] ? @"Stop loop" : @"Loop",
-        @"−", [self slower] ? @"Full speed" : @"Slower",
+        @"−  =", [self slower] ? [NSString stringWithFormat:@"%.1f\u00d7 · slower, faster", _rate] : @"Slower, faster",
         @"K", @"Keep",
         @"W", [self wordSlipShown] ? @"Close the word" : @"A word",
-        _clipPass ? @"C" : @"", _clipPass ? @"Leave clip" : @"",
+        @"C", _clipPass ? @"Leave clip" : @"Clip from here",
         @"S", _subtitlesOn ? @"Subtitles off" : @"Subtitles",
         @"T", _transcriptShown ? @"Hide transcript" : @"Transcript",
         [self fullScreen] ? @"Esc" : @"F", [self fullScreen] ? @"Leave full screen" : @"Full screen", nil]];
@@ -1547,7 +1664,10 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
     if ([chars length] != 1) return NO;
     switch ([chars characterAtIndex:0]) {
         case ' ':                       if (_clipPass) [self clipSpace]; else [self togglePlay]; return YES;
-        case 'c': case 'C':             if (_clipPass) [self leaveClip]; else [self showNote:@"Today’s clip starts from the desk card (⌘K)." for:2.5]; return YES;
+        case 'c': case 'C':
+            if (_clipPass) [self leaveClip];
+            else [self startClipHere];
+            return YES;
         case 'r': case 'R':             if (_clipPass) [self toggleRecordSayAlong]; return YES;
         case NSLeftArrowFunctionKey:    if ([self wordSlipShown]) [self chooseSlipWord:_slipSelection - 1]; else { [self leaveClip]; [self skip:-RSSkipSeconds]; } return YES;
         case NSRightArrowFunctionKey:   if ([self wordSlipShown]) [self chooseSlipWord:_slipSelection + 1]; else { [self leaveClip]; [self skip:RSSkipSeconds]; } return YES;
@@ -1557,7 +1677,8 @@ static const double RSLoopPauseAtLeast = 1.5;   // the pause after a looped line
         case 's': case 'S':             [self toggleSubtitles]; return YES;
         case 't': case 'T':             [self toggleTranscript]; return YES;
         case 'f': case 'F':             [self toggleFullScreen]; return YES;
-        case '-': case 0x2212:          [self toggleSlower]; return YES;
+        case '-': case 0x2212:          [self stepSlower]; return YES;
+        case '=': case '+':             [self stepFaster]; return YES;
         case 'k': case 'K':             if ([self wordSlipShown]) [self keepSlipWord]; else [self keepLine]; return YES;
         case 'h': case 'H':             [self toggleFeedback]; return YES;
         case 'w': case 'W':             [self toggleWordSlip]; return YES;

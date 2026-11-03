@@ -38,7 +38,8 @@ typedef enum {
     RSDeskCards = 0,
     RSDeskClip,
     RSDeskSay,
-    RSDeskWatch
+    RSDeskWatch,
+    RSDeskRead          // the day's reading (RSReadingWindow)
 } RSDeskAction;
 
 @interface RSDeskLine : NSObject
@@ -148,6 +149,25 @@ typedef enum {
 + (void)drawSayIn:(NSRect)rect heading:(NSString *)heading topic:(NSString *)topic passText:(NSString *)passText
          timeLeft:(NSString *)timeLeft fraction:(double)fraction recording:(BOOL)recording message:(NSString *)message
              note:(NSString *)note noteRow:(BOOL)noteRow editing:(BOOL)editing keys:(NSArray *)keys;
+
+// The recordings list on the Say card (R): a row a recording (day, what it
+// was, how long), the chosen one lifted; `first` is the row at the top.
++ (NSUInteger)sayListCapacityIn:(NSRect)rect;                   // rows that fit
++ (NSInteger)sayListRowAtPoint:(NSPoint)p in:(NSRect)rect first:(NSUInteger)first count:(NSUInteger)count;
++ (void)drawSayListIn:(NSRect)rect heading:(NSString *)heading rows:(NSArray *)rows selected:(NSInteger)selected
+                first:(NSUInteger)first recording:(BOOL)recording playing:(NSInteger)playing note:(NSString *)note keys:(NSArray *)keys;
+
+// ---- Reading (RSReadingWindow) ----
+// A sheet of paper on the bookcase's back: the title and what the reading
+// is, the text (an NSTextView in readingTextRectIn:, styled here), the read
+// under way and its clock, a note, and the keys.
++ (NSSize)readingWindowSize;
++ (NSRect)readingTextRectIn:(NSRect)rect;
++ (NSRect)readingClockAreaIn:(NSRect)rect;                      // all that changes while a read runs
++ (void)styleReadingTextView:(NSTextView *)view;
++ (NSDictionary *)readingTextAttributes;                        // Georgia on paper, the ink
++ (void)drawReadingIn:(NSRect)rect title:(NSString *)title about:(NSString *)about instruction:(NSString *)instruction
+                clock:(NSString *)clock recording:(BOOL)recording note:(NSString *)note keys:(NSArray *)keys;
 
 // ---- Shared ----
 + (NSString *)clock:(double)seconds;                            // "4:10"

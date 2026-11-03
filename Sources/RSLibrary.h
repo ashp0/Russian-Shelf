@@ -4,9 +4,17 @@
 //   Shelf.signed           this week's shelf, as it arrived (checked again at
 //                          every launch)
 //   Next Shelf.signed      a shelf that arrived early: it starts on a later day
+//   Reading.signed         this week's readings (RSReading.h), and
+//   Next Reading.signed    next week's, by the same rules as the shelves
 //   State.plist            how far each video has been watched; the last
 //                          refusal
 //   Videos/<id>/           video.mp4, subtitles.vtt, thumbnail.jpg, info.plist
+//   Subtitles/<id>.vtt     Russian subtitles the skill made for a video whose
+//                          own track doesn't match the speech, taken from the
+//                          study folder's Russian/Subtitles/<id>.vtt only when
+//                          its SHA-256 is the one sealed in the shelf list
+//                          (`subtitles:` lines, RSShelf.h); checked again
+//                          each time they're read
 //   Downloads/<id>/        a download in progress
 //   yt-dlp, Cache/, Logs/  the downloader (RSDownloader.h)
 //   Outbox/                reports not yet pushed (RSReport.h)
@@ -26,6 +34,8 @@
 
 #import <Foundation/Foundation.h>
 #import "RSShelf.h"
+
+@class RSSubtitles, RSReadingSet, RSReadingItem;
 
 @interface RSWatch : NSObject
 @property (nonatomic) double position;   // where it was left (seconds)
@@ -89,6 +99,26 @@ BOOL RSWritePlist(id plist, NSString *path);
 // *replaced is the shelf it took over from (nil if there was none).
 - (BOOL)advanceToDay:(long)today replaced:(RSShelf **)replaced;
 
+// ---- Readings (RSReading.h) ----
+// The week's readings and the next week's, offered and advanced by the
+// shelves' rules (newer only; early ones wait for their day). A refused
+// reading list says why in `readingNotice`.
+@property (nonatomic, readonly, retain) RSReadingSet *reading;
+@property (nonatomic, readonly, retain) RSReadingSet *pendingReading;
+@property (nonatomic, readonly, copy) NSString *readingNotice;
+- (RSOffer)offerReadingFile:(NSData *)file today:(long)today;
+- (BOOL)advanceReadingToDay:(long)today;
+// Today's reading: the set's own choice for the day.
+- (RSReadingItem *)readingForDay:(long)day;
+// What was done with a reading, by its key: {reads (0-3), times (seconds, one a read),
+// recorded (one a read), day (the last read's), title}; nil if never opened.
+- (NSDictionary *)readingProgressFor:(NSString *)key;
+// A read finished: the n-th of three took `seconds` (recorded or not).
+- (void)recordRead:(NSString *)key title:(NSString *)title read:(NSUInteger)n seconds:(double)seconds recorded:(BOOL)recorded day:(long)day;
+- (NSArray *)readingKeys;                                 // every key with progress, sorted
+// The key of a reading whose third read was on `day`, or nil.
+- (NSString *)readingFinishedOnDay:(long)day;
+
 // ---- Files ----
 - (NSString *)videoFolder:(NSString *)identifier;
 - (NSString *)moviePath:(NSString *)identifier;
@@ -96,6 +126,20 @@ BOOL RSWritePlist(id plist, NSString *path);
 - (NSString *)thumbnailPath:(NSString *)identifier;
 - (NSString *)stagingFolder:(NSString *)identifier;
 - (NSDictionary *)infoFor:(NSString *)identifier;          // duration, subtitles ("made"/"auto"/"none")
+// The subtitles the app uses for a video: the sealed made ones when they're
+// here and still match the shelf's hash, else the downloaded track (made by a
+// person, or YouTube's speech recognition: `automatic`). nil for none.
+- (RSSubtitles *)subtitlesFor:(NSString *)identifier;
+// "sealed", "made", "auto" or "none": which kind -subtitlesFor: gives.
+- (NSString *)subtitlesKindFor:(NSString *)identifier;
+- (NSString *)madeSubtitlesPath:(NSString *)identifier;     // Subtitles/<id>.vtt
+// The hash sealed for a video's made subtitles (this week's shelf, then the
+// next), or nil.
+- (NSString *)sealedSubtitleHashFor:(NSString *)identifier;
+// Keeps `vtt` as the video's made subtitles if its SHA-256 is the sealed one
+// and it reads as subtitles made by a person. YES if it was written now (not
+// if it was here already, or refused).
+- (BOOL)takeMadeSubtitles:(NSData *)vtt for:(NSString *)identifier;
 - (BOOL)isDownloaded:(NSString *)identifier;
 // This week's videos, then the next shelf's, that aren't here yet. Only ids
 // from shelves that opened: nothing else is ever downloaded.
@@ -125,6 +169,13 @@ BOOL RSWritePlist(id plist, NSString *path);
 - (NSString *)feltFor:(NSString *)identifier;
 - (NSString *)wantFor:(NSString *)identifier;
 - (void)setFelt:(NSString *)felt want:(NSString *)want for:(NSString *)identifier;
+// The speed the video was left at (1 if never changed) and the slowest ever
+// chosen for it (1 if never slowed): the player's ladder, RSPlayer.h. The
+// report carries the slowest, so the skill can see when the owner stops
+// needing it.
+- (float)rateFor:(NSString *)identifier;
+- (void)setRate:(float)rate for:(NSString *)identifier;
+- (float)slowestFor:(NSString *)identifier;
 // The first video on this week's shelf not finished yet, or nil.
 - (NSString *)nextIdentifier;
 
@@ -137,9 +188,12 @@ BOOL RSWritePlist(id plist, NSString *path);
 - (void)recordClip:(NSString *)identifier start:(double)start end:(double)end passes:(NSUInteger)passes day:(long)day;
 
 // ---- Say (RSSay.h) ----
-// What was said on a day: {island, passes, recorded} (NSString, NSNumbers); nil for none.
+// What was said on a day: {island, passes, recorded} (NSString, NSNumbers)
+// for the day's first round; nil for none. Later rounds (another topic,
+// whenever the owner likes) are under "more", an array of the same.
 - (NSDictionary *)sayOnDay:(long)day;
 - (void)recordSayOnDay:(long)day island:(NSString *)island passes:(NSUInteger)passes recorded:(BOOL)recorded;
+- (void)recordSayOnDay:(long)day island:(NSString *)island passes:(NSUInteger)passes recorded:(BOOL)recorded round:(NSUInteger)round;
 - (NSArray *)sayDays;                                 // the days with an entry, ascending (NSNumber)
 
 - (BOOL)save;

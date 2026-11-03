@@ -11,7 +11,7 @@
 //     wxyz0123456 | not downloaded | - | ...
 //
 //     Help (shown, heard again, looped, slowed, transcript, subtitles, looked up, kept):
-//     JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | looked up 3 | kept 2
+//     JE4cI_Knzvc | shown 12 | heard again 8 | looped 2 | slowed 1 | transcript 1 | subtitles 0 | looked up 3 | kept 2 | slowest 0.6
 //
 //     How it felt (the owner's own choice, about the video):
 //     JE4cI_Knzvc | about right | more like this
@@ -25,11 +25,19 @@
 //     Words kept (word (lemma) | gloss | the line):
 //     JE4cI_Knzvc | 4:10 | отрезала (отре́зать) | cut off | in: Она отрезала волосы.
 //
+//     Read (day | story | reads of 3 | times | recorded):
+//     2026-11-09 | Честный студент | reads 3 | 4:10 · 3:05 · 2:50 | recorded
+//
+//     Reading words kept (word (lemma) | gloss | the sentence):
+//     2026-11-09-1 | обману́ть (обману́ть) | deceive | in: Он не хотел обмануть друга.
+//
 // "partly" gives the furthest point reached by playing (skipping ahead
 // doesn't count). "from:" names the Mac that wrote it: each Mac keeps its own
 // record of what was watched there, so the newest report from each Mac says
 // it all for that Mac; older ones from the same Mac can be ignored. The help
-// and later sections are there only when there's something to say: how
+// and later sections are there only when there's something to say (a help
+// row ends with `slowest 0.6`, the slowest speed chosen for the video, when it
+// was slowed at all): how
 // often, and on which lines (so which verbs, endings, reductions), help was
 // asked tells Claude whether the shelf is at the right level and what to
 // look for next week; "how it felt" is the owner's own word on the video
@@ -47,6 +55,8 @@ extern const NSUInteger RSReportLinesPerVideo;      // 40
 NSString *RSReportText(RSShelf *shelf, RSLibrary *library, RSLines *lines, time_t now);
 // The same, with the owner's notes for the tutor (RSSay's Tutor.txt) at the end.
 NSString *RSReportTextWithNotes(RSShelf *shelf, RSLibrary *library, RSLines *lines, NSString *tutor, time_t now);
+// Whether a card's `video` is a reading's key ("2026-11-09-3"), not a video's id.
+BOOL RSIsReadingKey(NSString *key);
 // This Mac's name, as in Sharing ("Ashwin’s Mac Pro").
 NSString *RSComputerName(void);
 // "4:10", "1:02:03".

@@ -70,8 +70,9 @@ FRAMEWORKS := -framework Cocoa -framework AVKit -framework AVFoundation -framewo
 MODEL_SRC := Sources/RSDate.c Sources/RSKeys.c Sources/RSCrypto.m Sources/RSShelf.m Sources/RSSubtitles.m \
              Sources/RSProcess.m Sources/RSSync.m Sources/RSLibrary.m Sources/RSDownloader.m Sources/RSReport.m \
              Sources/RSLines.m Sources/RSClip.m Sources/RSDictionary.m Sources/RSClips.m Sources/RSSay.m \
-             Sources/RSSyncFolder.m Sources/RSMerge.m Sources/RSSyncManager.m
-VIEW_SRC  := Sources/RSStyle.m Sources/RSShelfView.m Sources/RSPlayer.m Sources/RSReview.m Sources/RSSayWindow.m Sources/RSController.m \
+             Sources/RSSyncFolder.m Sources/RSMerge.m Sources/RSSyncManager.m Sources/RSReading.m
+VIEW_SRC  := Sources/RSStyle.m Sources/RSShelfView.m Sources/RSPlayer.m Sources/RSReview.m Sources/RSSayWindow.m Sources/RSReadingWindow.m \
+             Sources/RSController.m \
              Sources/RSSelfTest.m
 APP_SRC   := $(MODEL_SRC) $(VIEW_SRC) Sources/main.m
 
@@ -267,11 +268,11 @@ dist: all verify analyze test tlstest
 # keychain entry trusts "com.russianshelf.shelfsign" signed by this
 # certificate, so rebuilding it doesn't bring up a keychain dialog.
 SHELFSIGN := $(BUILD)/shelfsign
-SHELFSIGN_SRC := Tools/shelfsign.m Sources/RSDate.c Sources/RSCrypto.m Sources/RSShelf.m
+SHELFSIGN_SRC := Tools/shelfsign.m Sources/RSDate.c Sources/RSCrypto.m Sources/RSShelf.m Sources/RSReading.m
 SHELFSIGN_IDENTITY ?= Apple Development
 HOSTFLAGS := -isysroot "$(HOST_SDK)" -fno-objc-arc -O1 -Wall -Wno-deprecated-declarations -ISources
 
-$(SHELFSIGN): $(SHELFSIGN_SRC) Sources/RSKeys.c Sources/RSShelf.h Sources/RSCrypto.h Sources/RSKeys.h
+$(SHELFSIGN): $(SHELFSIGN_SRC) Sources/RSKeys.c Sources/RSShelf.h Sources/RSReading.h Sources/RSCrypto.h Sources/RSKeys.h
 	@mkdir -p $(BUILD)
 	@echo "  compile  Tools/shelfsign.m (host)"
 	@$(CC) $(HOSTFLAGS) $(SHELFSIGN_SRC) Sources/RSKeys.c -framework Foundation -framework Security -o $@

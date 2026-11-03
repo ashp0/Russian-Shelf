@@ -11,6 +11,7 @@
 #import "RSDictionary.h"
 #import "RSClips.h"
 #import "RSSay.h"
+#import "RSReading.h"
 
 static const NSTimeInterval RSRefreshEvery = 60 * 60;
 static const NSTimeInterval RSDayCheckEvery = 5 * 60;
@@ -45,6 +46,7 @@ static NSString *RSTimeText(time_t t)
     RSReview *_review;
     RSSay *_say;
     RSSayWindow *_sayWindow;
+    RSReadingWindow *_readingWindow;
     RSSyncManager *_sync;               // sync between the Macs, from the first pull
     NSString *_studyFolder;
     NSMutableDictionary *_progress;     // id -> NSNumber, while downloading
@@ -93,6 +95,8 @@ static NSString *RSTimeText(time_t t)
     [_review release];
     [_sayWindow setDelegate:nil];
     [_sayWindow release];
+    [_readingWindow setDelegate:nil];
+    [_readingWindow release];
     [_say release];
     [_lines release];
     [_sync release];
@@ -116,6 +120,7 @@ static NSString *RSTimeText(time_t t)
 - (RSReview *)review { return _review; }
 - (RSSay *)say { return _say; }
 - (RSSayWindow *)sayWindow { return _sayWindow; }
+- (RSReadingWindow *)readingWindow { return _readingWindow; }
 
 // ---- Launch -------------------------------------------------------------------
 
@@ -153,6 +158,7 @@ static NSString *RSTimeText(time_t t)
     [_player close];
     [_review close];
     [_sayWindow close];
+    [_readingWindow close];
     [_downloader cancel];
     [_library save];
     [_lines save];
@@ -206,6 +212,11 @@ static NSString *RSTimeText(time_t t)
     return [_studyFolder stringByAppendingPathComponent:@"Russian/shelf.signed"];
 }
 
+- (NSString *)readingFilePath
+{
+    return [_studyFolder stringByAppendingPathComponent:@"Russian/reading.signed"];
+}
+
 - (void)refresh:(id)sender
 {
     if (_refreshing) return;
@@ -248,12 +259,32 @@ static NSString *RSTimeText(time_t t)
         if (offer == RSOfferTaken && before && ![[before fingerprint] isEqualToString:[[_library current] fingerprint]])
             [self queueReportFor:before];       // last word on the shelf that just went
     }
+    [self takeSealedSubtitles];
+    NSData *readings = [NSData dataWithContentsOfFile:[self readingFilePath]];
+    if (readings) [_library offerReadingFile:readings today:RSToday()];
     [self advanceDay];
     [self reloadRows];
     [self updateStatus];
     [self startDownloads];
     [self pushReports];
     if (result && [result ok]) [self syncWithOtherMacs];
+}
+
+// Subtitles the skill made for a video (Russian/Subtitles/<id>.vtt): taken
+// only when the shelf seals their hash (RSLibrary.h).
+- (void)takeSealedSubtitles
+{
+    NSString *folder = [_studyFolder stringByAppendingPathComponent:@"Russian/Subtitles"];
+    BOOL any = NO;
+    for (RSShelf *shelf in [NSArray arrayWithObjects:[_library current] ?: (id)[NSNull null], [_library pending] ?: (id)[NSNull null], nil]) {
+        if ((id)shelf == [NSNull null]) continue;
+        for (NSString *identifier in [shelf subtitleHashes]) {
+            NSData *vtt = [NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:[identifier stringByAppendingPathExtension:@"vtt"]]];
+            if (vtt && [_library takeMadeSubtitles:vtt for:identifier]) any = YES;
+        }
+    }
+    // An open player goes on with the track it has; the next opening reads the made one.
+    (void)any;
 }
 
 // Which kind each video is, from the MacBook's history.txt (the sealed list
@@ -277,6 +308,7 @@ static NSString *RSTimeText(time_t t)
 - (void)advanceDay
 {
     RSShelf *replaced = nil;
+    if ([_library advanceReadingToDay:RSToday()]) [self reloadRows];
     if ([_library advanceToDay:RSToday() replaced:&replaced]) {
         if (replaced) [self queueReportFor:replaced];
         [self removeLeftovers];
@@ -402,6 +434,28 @@ static NSString *RSTimeText(time_t t)
         [line setIdentifier:[clip video]];
         [line setAction:RSDeskClip];
         [lines addObject:line];
+    } else if (clip == nil && !today) {
+        RSVideo *automatic = [self videoWithOnlyAutomaticCaptions];
+        if (automatic) {
+            RSDeskLine *line = [[[RSDeskLine alloc] init] autorelease];
+            [line setLabel:@"Clip"];
+            [line setText:[NSString stringWithFormat:@"none: %@ has only YouTube’s automatic captions, which don’t match the speech", [automatic displayTitle]]];
+            [line setKey:@""];
+            [line setAction:RSDeskClip];
+            [lines addObject:line];
+        }
+    }
+    RSReadingItem *reading = [_library readingForDay:RSToday()];
+    NSUInteger reads = [[[_library readingProgressFor:[reading key]] objectForKey:@"reads"] unsignedIntegerValue];
+    if (reading && reads < 3) {
+        RSDeskLine *line = [[[RSDeskLine alloc] init] autorelease];
+        [line setLabel:@"Read"];
+        NSString *what = [reading poem] ? @"the week’s poem" : @"today’s story";
+        [line setText:reads ? [NSString stringWithFormat:@"%@, %@ (read %lu of 3 done)", RSWithoutStress([reading title]), what, (unsigned long)reads]
+                            : [NSString stringWithFormat:@"%@, %@, three reads", RSWithoutStress([reading title]), what]];
+        [line setKey:@"⌘D"];
+        [line setAction:RSDeskRead];
+        [lines addObject:line];
     }
     NSDictionary *said = [_library sayOnDay:RSToday()];
     NSString *topic = [self todaysTopic];
@@ -526,6 +580,7 @@ static NSString *RSTimeText(time_t t)
         case RSDeskWatch: if (![self playVideo:[line identifier]]) NSBeep(); break;
         case RSDeskClip:  if (![self startTodaysClip]) NSBeep(); break;
         case RSDeskSay:   [self showSay]; break;
+        case RSDeskRead:  if (![self showReading]) NSBeep(); break;
     }
 }
 
@@ -551,13 +606,14 @@ static NSString *RSTimeText(time_t t)
         [_player close];
     }
     RSWatch *watch = [_library watchFor:identifier];
-    RSSubtitles *subtitles = [RSSubtitles subtitlesWithFile:[_library subtitlesPath:identifier]];
+    RSSubtitles *subtitles = [_library subtitlesFor:identifier];
     _player = [[RSPlayer alloc] initWithIdentifier:identifier title:[video displayTitle] movie:[_library moviePath:identifier]
                                          subtitles:subtitles position:[watch position] furthest:[watch furthest]
                                           duration:[watch duration]];
     [_player setDelegate:self];
     [_player setFelt:[_library feltFor:identifier] want:[_library wantFor:identifier]];
     [_player setKind:[video kind] firstViewing:![watch finished]];
+    [_player setRate:[_library rateFor:identifier]];
     [_player setDictionary:[self dictionary]];
     [_player show];
     return _player;
@@ -579,6 +635,13 @@ static NSString *RSTimeText(time_t t)
 - (void)player:(RSPlayer *)player helped:(RSHelp)kind line:(RSLine *)line
 {
     [_library countHelp:kind for:[player identifier] line:[line text] start:[line start]];
+    [_library save];
+    _watchChanged = YES;
+}
+
+- (void)player:(RSPlayer *)player rateChanged:(float)rate
+{
+    [_library setRate:rate for:[player identifier]];
     [_library save];
     _watchChanged = YES;
 }
@@ -651,13 +714,15 @@ static NSString *RSTimeText(time_t t)
 // ---- Today's clip --------------------------------------------------------------------
 
 // Today's clip: the one begun today, else a new one from the week's fast video
-// (or the natural one, or any) that is downloaded and has subtitles.
+// (or the natural one, or any) that is downloaded and has subtitles. Once
+// today's is done, another (the next stretch): shadowing whenever the owner
+// wants it.
 - (RSClipPlan *)todaysClip
 {
     RSShelf *shelf = [_library current];
     if (shelf == nil) return nil;
     NSDictionary *today = [_library clipOnDay:RSToday()];
-    if (today) {
+    if (today && [[today objectForKey:@"passes"] unsignedIntegerValue] < 3) {
         RSClipPlan *plan = [[[RSClipPlan alloc] init] autorelease];
         [plan setVideo:[today objectForKey:@"video"]];
         [plan setStart:[[today objectForKey:@"start"] doubleValue]];
@@ -671,11 +736,25 @@ static NSString *RSTimeText(time_t t)
     for (RSVideo *video in candidates) {
         NSString *identifier = [video identifier];
         if (![_library isDownloaded:identifier]) continue;
-        RSSubtitles *subtitles = [RSSubtitles subtitlesWithFile:[_library subtitlesPath:identifier]];
-        if ([[subtitles lines] count] == 0) continue;
+        RSSubtitles *subtitles = [_library subtitlesFor:identifier];
+        // Never a clip on YouTube's automatic captions: their lines aren't what
+        // anyone said, so read and say-along passes would be on the wrong words.
+        if ([[subtitles lines] count] == 0 || [subtitles automatic]) continue;
         RSClipPlan *plan = RSChooseClip(identifier, subtitles, [_library helpedLinesFor:identifier], [_library clipsFor:identifier]);
         if (plan) return plan;
     }
+    return nil;
+}
+
+// The downloaded video with lines that has only automatic captions, when no
+// clip can be made at all: the desk card says why.
+- (RSVideo *)videoWithOnlyAutomaticCaptions
+{
+    RSShelf *shelf = [_library current];
+    for (NSString *kind in [NSArray arrayWithObjects:RSKindFast, RSKindNatural, nil])
+        for (RSVideo *video in [shelf videosOfKind:kind])
+            if ([_library isDownloaded:[video identifier]] && [[_library subtitlesKindFor:[video identifier]] isEqualToString:@"auto"])
+                return video;
     return nil;
 }
 
@@ -715,17 +794,35 @@ static NSString *RSTimeText(time_t t)
     return n < 0 || n >= (NSInteger)RSSaySettings ? 0 : (NSUInteger)n;
 }
 
-// Today's topic: a story finished today is retold; otherwise the day's island.
-- (NSString *)todaysTopic
+// The retell topics today: a reading read three times today (with its
+// lesson, for the fourth pass), then a story finished today.
+- (NSArray *)retellTopicsWithLessons:(NSMutableDictionary *)lessons
 {
-    NSDictionary *said = [_library sayOnDay:RSToday()];
-    if ([[said objectForKey:@"island"] length]) return [said objectForKey:@"island"];
+    NSMutableArray *topics = [NSMutableArray array];
+    NSString *key = [_library readingFinishedOnDay:RSToday()];
+    RSReadingItem *item = key ? [[_library reading] itemWithKey:key] : nil;
+    if (item) {
+        NSString *topic = [NSString stringWithFormat:@"Перескажи: «%@»", RSWithoutStress([item title])];
+        [topics addObject:topic];
+        if (lessons) [lessons setObject:[item lesson] forKey:topic];
+    }
     RSShelf *shelf = [_library current];
     for (RSVideo *video in [shelf videos]) {
         RSWatch *watch = [_library watchFor:[video identifier]];
         if ([watch finished] && [_library finishedOnDay:RSToday() video:[video identifier]])
-            return [NSString stringWithFormat:@"Перескажи: «%@»", [video displayTitle]];
+            [topics addObject:[NSString stringWithFormat:@"Перескажи: «%@»", [video displayTitle]]];
     }
+    return topics;
+}
+
+// Today's topic: what was begun today; else a reading or a story finished
+// today, retold; otherwise the day's island.
+- (NSString *)todaysTopic
+{
+    NSDictionary *said = [_library sayOnDay:RSToday()];
+    if ([[said objectForKey:@"island"] length]) return [said objectForKey:@"island"];
+    NSArray *retell = [self retellTopicsWithLessons:nil];
+    if ([retell count]) return [retell objectAtIndex:0];
     return [_say islandForDay:RSToday()];
 }
 
@@ -736,8 +833,74 @@ static NSString *RSTimeText(time_t t)
         _sayWindow = [[RSSayWindow alloc] initWithSay:_say topic:[self todaysTopic] setting:[self sayLengthsSetting] today:RSToday()];
         [_sayWindow setDelegate:self];
     }
+    NSMutableDictionary *lessons = [NSMutableDictionary dictionary];
+    [_sayWindow setTopics:[self retellTopicsWithLessons:lessons]];
+    [_sayWindow setLessons:lessons];
     [_sayWindow show];
     return _sayWindow;
+}
+
+// ---- Reading --------------------------------------------------------------------------
+
+- (RSReadingWindow *)showReading
+{
+    RSReadingItem *item = [_library readingForDay:RSToday()];
+    if (item == nil) return nil;
+    if (_readingWindow && [_readingWindow today] != RSToday()) [_readingWindow close];
+    if (_readingWindow == nil) {
+        _readingWindow = [[RSReadingWindow alloc] initWithSet:[_library reading] item:item say:_say today:RSToday()];
+        [_readingWindow setDelegate:self];
+        [_readingWindow setDictionary:[self dictionary]];
+    }
+    [_readingWindow show];
+    return _readingWindow;
+}
+
+- (void)showReading:(id)sender
+{
+    if (![self showReading]) NSBeep();
+}
+
+- (NSUInteger)readingWindow:(RSReadingWindow *)window readsOf:(RSReadingItem *)item
+{
+    return [[[_library readingProgressFor:[item key]] objectForKey:@"reads"] unsignedIntegerValue];
+}
+
+- (void)readingWindow:(RSReadingWindow *)window item:(RSReadingItem *)item finishedRead:(NSUInteger)n seconds:(double)seconds recorded:(BOOL)recorded
+{
+    [_library recordRead:[item key] title:RSWithoutStress([item title]) read:n seconds:seconds recorded:recorded day:RSToday()];
+    [_library save];
+    _watchChanged = YES;
+    if (n >= 3 && [_library current]) { [self queueReportFor:[_library current]]; [self pushReports]; }
+    [self reloadRows];
+}
+
+- (NSString *)readingWindow:(RSReadingWindow *)window keepWord:(NSString *)word entry:(RSDictionaryEntry *)entry
+                   sentence:(NSString *)sentence item:(RSReadingItem *)item
+{
+    // The card's place in its "video" is the sentence's number, so the same
+    // word in the same sentence is kept once.
+    NSArray *sentences = [item sentences];
+    NSUInteger index = 0;
+    for (NSUInteger i = 0; i < [sentences count]; i++)
+        if ([RSWithoutStress([sentences objectAtIndex:i]) isEqualToString:sentence]) { index = i + 1; break; }
+    NSString *problem = nil;
+    RSKeptLine *kept = [_lines keepWord:word lemma:[entry accented] gloss:[entry gloss] rank:[entry rank] inLine:sentence before:nil
+                                  video:[item key] title:RSWithoutStress([item title]) start:(double)index end:0 today:RSToday() problem:&problem];
+    if (kept == nil) return problem;
+    [_lines save];
+    _watchChanged = YES;
+    [self reloadRows];
+    return [NSString stringWithFormat:@"Kept “%@”. It comes back tomorrow (⌘L), to read aloud.", word];
+}
+
+- (void)readingWindowClosed:(RSReadingWindow *)window
+{
+    if (window != _readingWindow) return;
+    [_readingWindow setDelegate:nil];
+    [_readingWindow autorelease];
+    _readingWindow = nil;
+    [self reloadRows];
 }
 
 - (void)showSay:(id)sender { [self showSay]; }
@@ -754,11 +917,16 @@ static NSString *RSTimeText(time_t t)
     [self reloadRows];
 }
 
-- (void)sayWindow:(RSSayWindow *)window finishedPass:(NSUInteger)pass recorded:(BOOL)recorded
+- (void)sayWindow:(RSSayWindow *)window finishedPass:(NSUInteger)pass topic:(NSString *)topic round:(NSUInteger)round recorded:(BOOL)recorded
 {
     NSDictionary *said = [_library sayOnDay:RSToday()];
-    BOOL wasRecorded = [[said objectForKey:@"recorded"] boolValue];
-    [_library recordSayOnDay:RSToday() island:[self todaysTopic] passes:pass recorded:recorded || wasRecorded];
+    BOOL wasRecorded = NO;
+    if (round <= 1) wasRecorded = [[said objectForKey:@"recorded"] boolValue];
+    else {
+        NSArray *more = [[said objectForKey:@"more"] isKindOfClass:[NSArray class]] ? [said objectForKey:@"more"] : nil;
+        if ([more count] >= round - 1) wasRecorded = [[[more objectAtIndex:round - 2] objectForKey:@"recorded"] boolValue];
+    }
+    [_library recordSayOnDay:RSToday() island:topic passes:pass recorded:recorded || wasRecorded round:round];
     [_library save];
     _watchChanged = YES;
     [self reloadRows];
@@ -957,6 +1125,7 @@ static NSString *RSKey(unichar c)
     [shelf addItem:[NSMenuItem separatorItem]];
     RSItem(shelf, @"Cards", @selector(showLines:), @"l", cmd, self);
     RSItem(shelf, @"Today’s Clip", @selector(startTodaysClip:), @"k", cmd, self);
+    RSItem(shelf, @"Reading", @selector(showReading:), @"d", cmd, self);
     RSItem(shelf, @"Say", @selector(showSay:), @"s", cmd, self);
     RSItem(shelf, @"Islands…", @selector(showIslands:), @"i", cmd, self);
     NSMenu *lengths = [[[NSMenu alloc] initWithTitle:@"Pass Lengths"] autorelease];
@@ -976,8 +1145,10 @@ static NSString *RSKey(unichar c)
     RSItem(play, @"Hear This Line Again", @selector(replay:), RSKey(NSUpArrowFunctionKey), 0, self);
     RSItem(play, @"Loop This Line", @selector(loop:), @"l", 0, self);
     RSItem(play, @"Slower", @selector(slower:), @"-", 0, self);
+    RSItem(play, @"Faster", @selector(faster:), @"=", 0, self);
     RSItem(play, @"Keep This Line", @selector(keep:), @"k", 0, self);
     RSItem(play, @"A Word", @selector(word:), @"w", 0, self);
+    RSItem(play, @"A Clip from Here", @selector(clipHere:), @"c", 0, self);
     [play addItem:[NSMenuItem separatorItem]];
     RSItem(play, @"How Was This Video?", @selector(feedback:), @"h", 0, self);
     [play addItem:[NSMenuItem separatorItem]];
@@ -1011,6 +1182,7 @@ static NSString *RSKey(unichar c)
     if (a == @selector(refresh:)) return !_refreshing;
     if (a == @selector(showShelf:) || a == @selector(showLines:)) return YES;
     if (a == @selector(startTodaysClip:)) return [self todaysClip] != nil;
+    if (a == @selector(showReading:)) return [_library readingForDay:RSToday()] != nil;
     if (a == @selector(showSay:) || a == @selector(showIslands:)) return YES;
     if (a == @selector(chooseSayLengths:)) { [item setState:[item tag] == (NSInteger)[self sayLengthsSetting] ? NSOnState : NSOffState]; return YES; }
     if (a == @selector(loop:)) [item setState:[_player looping] ? NSOnState : NSOffState];
@@ -1032,9 +1204,11 @@ static NSString *RSKey(unichar c)
 - (void)transcript:(id)sender { [_player toggleTranscript]; }
 - (void)fullScreen:(id)sender { [_player toggleFullScreen]; }
 - (void)loop:(id)sender       { [_player toggleLoop]; }
-- (void)slower:(id)sender     { [_player toggleSlower]; }
+- (void)slower:(id)sender     { [_player stepSlower]; }
+- (void)faster:(id)sender     { [_player stepFaster]; }
 - (void)keep:(id)sender       { [_player keepLine]; }
 - (void)word:(id)sender       { [_player toggleWordSlip]; }
 - (void)feedback:(id)sender   { [_player toggleFeedback]; }
+- (void)clipHere:(id)sender   { if ([_player clipPass]) [_player leaveClip]; else [_player startClipHere]; }
 
 @end

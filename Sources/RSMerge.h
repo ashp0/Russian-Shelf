@@ -13,7 +13,8 @@
 //                        = the larger; position = the position of the side
 //                        with the greater furthest (the same: the larger);
 //                        felt, want = this Mac's if it has one, else the
-//                        other's. Help counts and `lines` are facts about
+//                        other's; rate (the speed it was left at) the same;
+//                        slowest = the slower. Help counts and `lines` are facts about
 //                        what was asked on each Mac and stay each Mac's own
 //                        (each reports its own); so does any key this
 //                        doesn't know. A video only the other Mac has comes
@@ -21,6 +22,8 @@
 //   clips                per video, by (start, end): the one with more
 //                        passes (then the later day; then this Mac's).
 //   say                  by day: this Mac's day if it has one, else theirs.
+//   readings             by key: the side with more reads (then the later
+//                        day; then this Mac's).
 //   notice, anything else  this Mac's.
 //
 // Lines.plist (RSLines; the cards):

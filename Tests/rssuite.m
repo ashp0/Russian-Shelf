@@ -27,6 +27,8 @@
 #import "RSDictionary.h"
 #import "RSClips.h"
 #import "RSSay.h"
+#import "RSReading.h"
+#import "RSMerge.h"
 
 static int failures = 0, checks = 0;
 
@@ -727,6 +729,9 @@ static void TestReports(void)
     text = RSReportTextWithNotes([library current], library, lines, @"## 2026-10-14\nя путаю падежи\n", when);
     CHECK(Has(text, @"\nSaid (day | topic | passes of 3 | recorded):\n2026-10-14 | Мой день | passes 3 | recorded\n") && !Has(text, @"before the shelf"),
           "said section, this shelf's days only:\n%s", [text UTF8String]);
+    [library recordSayOnDay:RSDaysFromCivil(2026, 10, 14) island:@"Еда" passes:3 recorded:NO round:2];
+    NSString *rounds = RSReportTextWithNotes([library current], library, lines, nil, when);
+    CHECK(Has(rounds, @"2026-10-14 | Мой день | passes 3 | recorded\n2026-10-14 | Еда | passes 3 | not recorded | round 2\n"), "a second round, on its own line:\n%s", [rounds UTF8String]);
     CHECK(Has(text, @"\nFor the tutor:\n## 2026-10-14\nя путаю падежи\n"), "the tutor's notes");
     text = RSReportText([library current], library, lines, when);
     CHECK(Has(text, [NSString stringWithFormat:@"\nClips worked (stretch | passes of 3 | day):\n%@ | 2:10–4:40 | passes 3 | day 2026-10-14\n", Id(2)]),
@@ -756,6 +761,26 @@ static void TestReports(void)
     CHECK([helped count] == 2 && [[[helped objectAtIndex:1] objectForKey:@"heard again"] intValue] == 1 &&
           [[[helped objectAtIndex:0] objectForKey:@"looped"] intValue] == 1 && [[helped objectAtIndex:0] objectForKey:@"shown"] == nil,
           "the lines, saved");
+
+    // The speed a video was left at, and the slowest ever chosen for it.
+    CHECK([again rateFor:Id(1)] == 1 && [again slowestFor:Id(1)] == 1, "full speed until changed");
+    [again setRate:0.8f for:Id(1)];
+    [again setRate:0.6f for:Id(1)];
+    [again setRate:0.9f for:Id(1)];
+    [again setRate:0.7f for:Id(2)];
+    [again setRate:1 for:Id(2)];
+    [again setRate:3 for:Id(3)];
+    [again setRate:0.1f for:Id(3)];
+    CHECK(fabs([again rateFor:Id(1)] - 0.9) < 0.001 && fabs([again slowestFor:Id(1)] - 0.6) < 0.001, "left at 0.9, slowest 0.6");
+    CHECK([again rateFor:Id(2)] == 1 && fabs([again slowestFor:Id(2)] - 0.7) < 0.001 && [again rateFor:Id(3)] == 1 && [again slowestFor:Id(3)] == 1,
+          "back to full speed keeps the slowest; nonsense rates are ignored");
+    [again save];
+    RSLibrary *rated = [[[RSLibrary alloc] initWithFolder:folder aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    CHECK(fabs([rated rateFor:Id(1)] - 0.9) < 0.001 && fabs([rated slowestFor:Id(2)] - 0.7) < 0.001, "speeds saved");
+    text = RSReportText([rated current], rated, lines, when);
+    CHECK(Has(text, [Id(2) stringByAppendingString:@" | shown 2 | heard again 1 | looped 1 | slowed 1 | transcript 1 | subtitles 1 | looked up 0 | kept 1 | slowest 0.7\n"]) &&
+          Has(text, [Id(1) stringByAppendingString:@" | shown 0 | heard again 0 | looped 0 | slowed 0 | transcript 0 | subtitles 0 | looked up 0 | kept 0 | slowest 0.6\n"]) &&
+          !Has(text, [Id(3) stringByAppendingString:@" | shown"]), "the slowest speed ends the help row, and makes one:\n%s", [text UTF8String]);
 
     // How it felt: one word each, about the video; only the known words.
     CHECK([again feltFor:Id(1)] == nil && [again wantFor:Id(1)] == nil, "nothing chosen yet");
@@ -1036,6 +1061,12 @@ static void TestClips(NSString *fixtures)
         [NSNumber numberWithDouble:0], @"start", [NSNumber numberWithDouble:[lastLine end] + 1], @"end", nil]];
     CHECK(RSChooseClip(@"JE4cI_Knzvc", subs, helped, worked) == nil, "everything worked: nothing left");
     CHECK(RSChooseClip(@"x", [RSSubtitles subtitlesWithVTT:@"WEBVTT\n"], nil, nil) == nil, "no lines, no clip");
+    // A clip from a line the owner chose (C in the player), whenever.
+    RSClipPlan *here = RSClipFromLine(@"JE4cI_Knzvc", subs, 3);
+    CHECK(here && [here firstLine] == 3 && fabs([here start] - [(RSLine *)[lines objectAtIndex:3] start]) < 0.01 && [here lastLine] >= 3 &&
+          ([here end] - [here start] <= RSClipLongest + 0.01 || [here lastLine] == [lines count] - 1), "a clip from line 3");
+    CHECK(RSClipFromLine(@"JE4cI_Knzvc", subs, [lines count]) == nil && [RSClipFromLine(@"JE4cI_Knzvc", subs, [lines count] - 1) firstLine] == [lines count] - 1,
+          "from the last line, but not past it");
     CHECK([RSClipSpan(130, 280) isEqualToString:@"2:10–4:40"], "the span: %s", [RSClipSpan(130, 280) UTF8String]);
 
     // The library remembers clips, and today's.
@@ -1058,6 +1089,219 @@ static void TestClips(NSString *fixtures)
 
 // ---- Say ------------------------------------------------------------------------
 
+// ---- Subtitles the skill made, sealed by hash ---------------------------------
+
+static void TestMadeSubtitles(NSString *fixtures)
+{
+    NSString *problem = nil;
+    NSString *vtt = @"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nЩас,\n\n00:00:02.200 --> 00:00:03.000\nчё ты сказал?\n\n00:00:03.100 --> 00:00:04.000\n- Ничего.\n\n"
+                    @"00:00:04.100 --> 00:00:05.000\nЯ сказал,\n\n00:00:07.000 --> 00:00:08.000\nчто ваще не знаю.\n\n00:00:08.100 --> 00:00:09.000\nПонял?\n";
+    NSData *data = [vtt dataUsingEncoding:NSUTF8StringEncoding];
+    NSString *hash = RSSHA256Hex(data);
+    CHECK([hash length] == 64 && [RSSHA256Hex([NSData data]) isEqualToString:@"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"], "SHA-256 as hex: %s", [hash UTF8String]);
+
+    // The list: a subtitles line seals the hash; it round-trips; nonsense is refused.
+    NSString *list = [NSString stringWithFormat:@"Russian Shelf 1\nstart: 2026-11-09\n# kind: fast\nvideo: vid00000001 | Easy Russian | A\nvideo: vid00000002 | S | B\n"
+                      @"subtitles: vid00000001 %@\n", [hash uppercaseString]];
+    RSShelf *shelf = [RSShelf shelfWithText:list problem:&problem];
+    CHECK(shelf && [[[shelf subtitleHashes] objectForKey:@"vid00000001"] isEqualToString:hash] && [[shelf subtitleHashes] count] == 1,
+          "the sealed hash reads, lowercased (%s)", [problem UTF8String]);
+    CHECK(Has([shelf text], [NSString stringWithFormat:@"video: vid00000002 | S | B\nsubtitles: vid00000001 %@\n", hash]) &&
+          [[[RSShelf shelfWithText:[shelf text] problem:&problem] text] isEqualToString:[shelf text]], "and round-trips after the videos");
+    CHECK([[[shelf shelfSealedAt:@"2026-11-08 20:00:00"] subtitleHashes] count] == 1, "sealing keeps it");
+    struct { NSString *text, *expect; } bad[] = {
+        { @"Russian Shelf 1\nstart: 2026-11-09\nvideo: vid00000001 | S | A\nsubtitles: vid00000001 abc\n", @"sha-256" },
+        { @"Russian Shelf 1\nstart: 2026-11-09\nvideo: vid00000001 | S | A\nsubtitles: vid00000001\n", @"sha-256" },
+        { [NSString stringWithFormat:@"Russian Shelf 1\nstart: 2026-11-09\nvideo: vid00000001 | S | A\nsubtitles: vid00000009 %@\n", hash], @"isn’t on the shelf" },
+        { [NSString stringWithFormat:@"Russian Shelf 1\nstart: 2026-11-09\nvideo: vid00000001 | S | A\nsubtitles: vid00000001 %@\nsubtitles: vid00000001 %@\n", hash, hash], @"twice" },
+    };
+    for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++)
+        CHECK([RSShelf shelfWithText:bad[i].text problem:&problem] == nil && Has(problem, bad[i].expect), "bad subtitles line %zu: %s", i, [problem UTF8String]);
+
+    // Sentences and turns: a cue without a stop joins the next within a
+    // second, unless that opens a turn; at most two cues; a long gap breaks.
+    RSSubtitles *subs = [RSSubtitles subtitlesWithVTT:vtt];
+    NSArray *units = [subs sentencesFrom:0 to:5];
+    CHECK([units count] == 5 && [[(RSLine *)[units objectAtIndex:0] text] isEqualToString:@"Щас, чё ты сказал?"] &&
+          fabs([(RSLine *)[units objectAtIndex:0] start] - 1) < 1e-6 && fabs([(RSLine *)[units objectAtIndex:0] end] - 3) < 1e-6,
+          "two cues make one sentence (%lu units)", (unsigned long)[units count]);
+    CHECK([[(RSLine *)[units objectAtIndex:1] text] isEqualToString:@"- Ничего."] && [[(RSLine *)[units objectAtIndex:2] text] isEqualToString:@"Я сказал,"] &&
+          [[(RSLine *)[units objectAtIndex:3] text] isEqualToString:@"что ваще не знаю."] && [[(RSLine *)[units objectAtIndex:4] text] isEqualToString:@"Понял?"],
+          "a turn stands alone; a two-second gap breaks a sentence");
+    CHECK([[subs sentencesFrom:5 to:5] count] == 1 && [[subs sentencesFrom:1 to:2] count] == 2 && [[subs sentencesFrom:9 to:12] count] == 0,
+          "a range of one; no joining past the range; nothing past the end");
+
+    // The library takes the made file only with the sealed hash, and uses it
+    // over the downloaded track; it goes with the video.
+    NSString *folder = Temp(@"made-subtitles");
+    [[NSFileManager defaultManager] removeItemAtPath:folder error:NULL];
+    RSLibrary *library = [[[RSLibrary alloc] initWithFolder:folder aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    NSString *sealedList = [NSString stringWithFormat:@"Russian Shelf 1\nstart: 2026-11-09\nsealed: 2026-11-08 20:00:00\n# kind: fast\n"
+                            @"video: %@ | Easy Russian | A\nvideo: %@ | S | B\nsubtitles: %@ %@\n", Id(1), Id(2), Id(1), hash];
+    CHECK([library offerShelfFile:SealRaw(sealedList, TestAES(), TestIV(), KeyAPrivate) today:0] == RSOfferTaken &&
+          [[library sealedSubtitleHashFor:Id(1)] isEqualToString:hash] && [library sealedSubtitleHashFor:Id(2)] == nil, "the sealed shelf carries the hash");
+    CHECK(![library takeMadeSubtitles:[@"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nПодмена.\n" dataUsingEncoding:NSUTF8StringEncoding] for:Id(1)] &&
+          ![library takeMadeSubtitles:data for:Id(2)] && ![[NSFileManager defaultManager] fileExistsAtPath:[library madeSubtitlesPath:Id(1)]],
+          "a file with another hash, or for a video without one, is refused");
+    CHECK([library takeMadeSubtitles:data for:Id(1)] && ![library takeMadeSubtitles:data for:Id(1)] &&
+          [[NSFileManager defaultManager] fileExistsAtPath:[library madeSubtitlesPath:Id(1)]], "the right file is kept, once");
+    FakeDownload(library, Id(1), 60);
+    FakeDownload(library, Id(2), 60);
+    CHECK([[library subtitlesKindFor:Id(1)] isEqualToString:@"sealed"] && [[library subtitlesKindFor:Id(2)] isEqualToString:@"made"] &&
+          [[library subtitlesKindFor:Id(3)] isEqualToString:@"none"], "which subtitles each video gets");
+    CHECK([[[library subtitlesFor:Id(1)] lines] count] == 6 && [[[library subtitlesFor:Id(2)] lines] count] == 1, "the made file over the downloaded track");
+    [@"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nПодмена.\n" writeToFile:[library madeSubtitlesPath:Id(1)] atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    CHECK([[library subtitlesKindFor:Id(1)] isEqualToString:@"made"] && [[[library subtitlesFor:Id(1)] lines] count] == 1,
+          "a swapped file is ignored: the hash is checked again on reading");
+    [library takeMadeSubtitles:data for:Id(1)];
+    NSString *next = [NSString stringWithFormat:@"Russian Shelf 1\nstart: 2026-11-16\nsealed: 2026-11-15 20:00:00\nvideo: %@ | S | C\n", Id(3)];
+    [library offerShelfFile:SealRaw(next, TestAES(), TestIV(), KeyAPrivate) today:RSDaysFromCivil(2026, 11, 16)];
+    FakeDownload(library, Id(3), 60);
+    [library removeLeftovers];
+    CHECK(![[NSFileManager defaultManager] fileExistsAtPath:[library madeSubtitlesPath:Id(1)]], "made subtitles go with their video");
+    (void)fixtures;
+}
+
+// ---- The week's readings ------------------------------------------------------
+
+static NSString *ReadingText(void)
+{
+    return @"Russian Reading 1\nstart: 2026-11-09\n# six stories and a poem\n"
+           @"story: 1 | Че\u0301стный студе\u0301нт | Че\u0301стность доро\u0301же оце\u0301нки.\nnew: обману\u0301ть, экза\u0301мен\n"
+           @"Жил-был студе\u0301нт. Он учи\u0301лся\nв университе\u0301те.\n\nНо вдруг... экза\u0301мен! «Что де\u0301лать?» — поду\u0301мал он.\n"
+           @"story: 2 | Терпе\u0301ние | Терпе\u0301ние — ключ.\nОдна\u0301жды… Коне\u0301ц.\n"
+           @"poem: Стрекоза\u0301 и Мураве\u0301й | Ива\u0301н Крыло\u0301в, 1808 | Кто ле\u0301том поёт, тот зимо\u0301й голода\u0301ет.\nmetre: четырёхстопный хорей, парная рифма\n"
+           @"Попрыгу\u0301нья Стрекоза\u0301\nЛе\u0301то кра\u0301сное пропе\u0301ла;\n\nОгляну\u0301ться не успе\u0301ла,\nКак зима\u0301 кати\u0301т в глаза\u0301.\n";
+}
+
+static void TestReading(void)
+{
+    NSString *problem = nil;
+    RSReadingSet *set = [RSReadingSet setWithText:ReadingText() problem:&problem];
+    CHECK(set && [[set items] count] == 3 && [set start] == RSDaysFromCivil(2026, 11, 9) && [set sealed] == nil, "a reading list reads (%s)", [problem UTF8String]);
+    RSReadingItem *first = [[set items] objectAtIndex:0], *poem = [[set items] lastObject];
+    CHECK([[first title] isEqualToString:@"Че\u0301стный студе\u0301нт"] && [[first lesson] isEqualToString:@"Че\u0301стность доро\u0301же оце\u0301нки."] &&
+          ![first poem] && [[first wordsToLearn] count] == 2 && [[[first wordsToLearn] objectAtIndex:1] isEqualToString:@"экза\u0301мен"] &&
+          [[first key] isEqualToString:@"2026-11-09-1"], "the first story: title, lesson, new words, key");
+    CHECK([[first text] isEqualToString:@"Жил-был студе\u0301нт. Он учи\u0301лся в университе\u0301те.\n\nНо вдруг... экза\u0301мен! «Что де\u0301лать?» — поду\u0301мал он."],
+          "a story's lines run together into paragraphs: %s", [[first text] UTF8String]);
+    CHECK([poem poem] && [[poem by] isEqualToString:@"Ива\u0301н Крыло\u0301в, 1808"] && [[poem metre] hasPrefix:@"четырёх"] && [poem wordsToLearn] == nil &&
+          [[poem text] isEqualToString:@"Попрыгу\u0301нья Стрекоза\u0301\nЛе\u0301то кра\u0301сное пропе\u0301ла;\n\nОгляну\u0301ться не успе\u0301ла,\nКак зима\u0301 кати\u0301т в глаза\u0301."] &&
+          [[poem key] isEqualToString:@"2026-11-09-3"], "the poem keeps its lines and stanzas: %s", [[poem text] UTF8String]);
+    CHECK([[first plainText] hasPrefix:@"Жил-был студент. Он учился в университете."] && [RSWithoutStress(@"экза\u0301мен") isEqualToString:@"экзамен"], "stress marks come off");
+    NSArray *sentences = [first sentences];
+    CHECK([sentences count] == 4 && [[sentences objectAtIndex:1] isEqualToString:@"Он учи\u0301лся в университе\u0301те."] &&
+          [[sentences objectAtIndex:2] isEqualToString:@"Но вдруг... экза\u0301мен!"] && [[sentences objectAtIndex:3] isEqualToString:@"«Что де\u0301лать?» — поду\u0301мал он."],
+          "sentences: %lu, %s", (unsigned long)[sentences count], [[sentences componentsJoinedByString:@" / "] UTF8String]);
+    CHECK([[poem sentences] count] == 4 && [[[poem sentences] objectAtIndex:0] isEqualToString:@"Попрыгу\u0301нья Стрекоза\u0301"], "a poem's lines are its sentences");
+    RSReadingSet *again = [RSReadingSet setWithText:[set text] problem:&problem];
+    CHECK(again && [[again text] isEqualToString:[set text]] && !Has([set text], @"# six"), "text round-trips (%s)", [problem UTF8String]);
+    CHECK(RSTextIsReadingList(@"# note\n\nRussian Reading 1\n") && !RSTextIsReadingList(ListText(1, @"2026-10-12")), "a reading list is known by its first line");
+    CHECK([RSShelf shelfWithText:ReadingText() problem:&problem] == nil, "a reading list isn't a shelf");
+
+    // Which is today's: one a day from the start, the last staying up.
+    long start = [set start];
+    CHECK([set itemForDay:start - 1] == nil && [set itemForDay:start] == first && [set itemForDay:start + 1] == [[set items] objectAtIndex:1] &&
+          [set itemForDay:start + 2] == poem && [set itemForDay:start + 30] == poem, "the day's reading");
+    CHECK([set itemWithKey:@"2026-11-09-2"] == [[set items] objectAtIndex:1] && [set itemWithKey:@"x"] == nil, "by key");
+    RSReadingSet *sealed = [set setSealedAt:@"2026-11-08 20:00:00"];
+    CHECK([[sealed sealed] isEqualToString:@"2026-11-08 20:00:00"] && [[sealed items] count] == 3 && Has([sealed text], @"sealed: 2026-11-08 20:00:00\n") &&
+          [sealed isNewerThan:set] && ![set isNewerThan:sealed], "sealed: a time, and newer");
+
+    struct { NSString *text, *expect; } bad[] = {
+        { @"", @"empty" },
+        { @"Russian Shelf 1\nstart: 2026-11-09\n", @"should say" },
+        { @"Russian Reading 1\nstory: 1 | A | B\ntext\n", @"no start" },
+        { @"Russian Reading 1\nstart: 2026-11-09\n", @"no readings" },
+        { @"Russian Reading 1\nstart: 2026-11-09\ntext before any reading\n", @"isn’t part of a reading list" },
+        { @"Russian Reading 1\nstart: 2026-11-09\nstory: 2 | A | B\ntext\n", @"should be 1" },
+        { @"Russian Reading 1\nstart: 2026-11-09\nstory: 1 | A\ntext\n", @"number | title | lesson" },
+        { @"Russian Reading 1\nstart: 2026-11-09\npoem: A | B\ntext\n", @"title | by | lesson" },
+        { @"Russian Reading 1\nstart: 2026-11-09\nstory: 1 | A | B\n", @"has no text" },
+        { @"Russian Reading 1\nstart: 2026-11-09\nnew: x\nstory: 1 | A | B\ntext\n", @"before any reading" },
+        { @"Russian Reading 1\nstart: 2026-11-09\nstory: 1 |  | B\ntext\n", @"empty or too long" },
+    };
+    for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
+        RSReadingSet *r = [RSReadingSet setWithText:bad[i].text problem:&problem];
+        CHECK(r == nil && Has(problem, bad[i].expect), "malformed reading list %zu: %s", i, [problem UTF8String]);
+    }
+    NSMutableString *eight = [NSMutableString stringWithString:@"Russian Reading 1\nstart: 2026-11-09\n"];
+    for (int i = 1; i <= 8; i++) [eight appendFormat:@"story: %d | S%d | L\ntext\n", i, i];
+    CHECK([RSReadingSet setWithText:eight problem:&problem] == nil && Has(problem, @"8 readings"), "eight readings are refused: %s", [problem UTF8String]);
+    NSMutableString *longText = [NSMutableString stringWithString:@"Russian Reading 1\nstart: 2026-11-09\nstory: 1 | A | B\n"];
+    for (int i = 0; i < 1100; i++) [longText appendString:@"длинный "];
+    CHECK([RSReadingSet setWithText:longText problem:&problem] == nil && Has(problem, @"longer than"), "a reading over 8,000 characters is refused");
+
+    // Sealed, opened; the library takes them by the shelves' rules; progress is kept.
+    NSData *file = RSSealText([sealed text], TestAES(), TestIV(), ^NSData *(NSData *m, NSString **why) { return Sign(m, KeyAPrivate); }, &problem);
+    RSReadingSet *opened = RSOpenSealedReadingSet(file, TestAES(), Hex(KeyAPublic), &problem);
+    CHECK(opened && [[opened text] isEqualToString:[sealed text]] && [[opened fingerprint] length] == 16, "sealed and opened (%s)", [problem UTF8String]);
+    CHECK(RSOpenSealedReadingSet(file, TestAES(), Hex(KeyBPublic), &problem) == nil && Has(problem, @"signature"), "the wrong key: %s", [problem UTF8String]);
+    NSData *shelfFile = SealRaw(ShelfText([NSArray arrayWithObject:Id(1)], @"2026-11-09", @"2026-11-08 20:00:00"), TestAES(), TestIV(), KeyAPrivate);
+    CHECK(RSOpenSealedReadingSet(shelfFile, TestAES(), Hex(KeyAPublic), &problem) == nil && Has(problem, @"isn’t a reading list"), "a shelf isn't readings: %s", [problem UTF8String]);
+    CHECK(RSOpenSealedShelf(file, TestAES(), Hex(KeyAPublic), &problem) == nil, "and readings aren't a shelf: %s", [problem UTF8String]);
+
+    NSString *folder = Temp(@"reading-library");
+    [[NSFileManager defaultManager] removeItemAtPath:folder error:NULL];
+    RSLibrary *library = [[[RSLibrary alloc] initWithFolder:folder aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    CHECK([library reading] == nil && [library readingForDay:start] == nil, "no readings yet");
+    CHECK([library offerReadingFile:file today:start - 3] == RSOfferTaken && [[[library reading] startText] isEqualToString:@"2026-11-09"] &&
+          [library readingForDay:start - 3] == nil && [[[library readingForDay:start + 1] title] isEqualToString:@"Терпе\u0301ние"], "the first readings are taken; none before their day");
+    CHECK([library offerReadingFile:file today:start] == RSOfferNothingNew, "the same file: nothing new");
+    CHECK([library offerReadingFile:shelfFile today:start] == RSOfferRefused && Has([library readingNotice], @"isn’t a reading list") && [library reading] != nil,
+          "a shelf offered as readings is refused, and the readings kept: %s", [[library readingNotice] UTF8String]);
+    NSData *next = RSSealText([[[RSReadingSet setWithText:[ReadingText() stringByReplacingOccurrencesOfString:@"2026-11-09" withString:@"2026-11-16"] problem:&problem]
+                                 setSealedAt:@"2026-11-15 20:00:00"] text], TestAES(), TestIV(), ^NSData *(NSData *m, NSString **why) { return Sign(m, KeyAPrivate); }, &problem);
+    CHECK([library offerReadingFile:next today:start + 2] == RSOfferQueued && [library readingNotice] == nil && [[[library pendingReading] startText] isEqualToString:@"2026-11-16"] &&
+          ![library advanceReadingToDay:start + 6] && [library advanceReadingToDay:start + 7] && [[[library reading] startText] isEqualToString:@"2026-11-16"] &&
+          [library pendingReading] == nil, "next week's readings wait for their day, then take over");
+    CHECK([library offerReadingFile:file today:start + 7] == RSOfferRefused && Has([library readingNotice], @"older"), "the old readings can't come back");
+
+    [library recordRead:@"2026-11-09-1" title:@"Честный студент" read:1 seconds:250 recorded:NO day:start];
+    [library recordRead:@"2026-11-09-1" title:@"Честный студент" read:2 seconds:185 recorded:YES day:start];
+    NSDictionary *p = [library readingProgressFor:@"2026-11-09-1"];
+    CHECK([[p objectForKey:@"reads"] intValue] == 2 && [[p objectForKey:@"times"] count] == 2 && [[[p objectForKey:@"times"] objectAtIndex:1] doubleValue] == 185 &&
+          [[[p objectForKey:@"recorded"] objectAtIndex:1] boolValue] && ![[[p objectForKey:@"recorded"] objectAtIndex:0] boolValue] &&
+          [library readingFinishedOnDay:start] == nil, "two reads kept");
+    [library recordRead:@"2026-11-09-1" title:nil read:3 seconds:170 recorded:YES day:start + 1];
+    [library recordRead:@"2026-11-09-1" title:nil read:1 seconds:240 recorded:NO day:start + 1];   // read again: still three
+    [library save];
+    RSLibrary *reopened = [[[RSLibrary alloc] initWithFolder:folder aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    p = [reopened readingProgressFor:@"2026-11-09-1"];
+    CHECK([[p objectForKey:@"reads"] intValue] == 3 && [[[p objectForKey:@"times"] objectAtIndex:0] doubleValue] == 240 && [[p objectForKey:@"title"] isEqualToString:@"Честный студент"] &&
+          [[reopened readingFinishedOnDay:start + 1] isEqualToString:@"2026-11-09-1"] && [[reopened readingKeys] count] == 1 &&
+          [[[reopened reading] startText] isEqualToString:@"2026-11-16"], "progress and the readings survive a reload");
+
+    // In the report, with the reading's words kept.
+    [reopened offerShelfFile:SealRaw(ShelfText([NSArray arrayWithObject:Id(1)], @"2026-11-09", @"2026-11-08 20:00:00"), TestAES(), TestIV(), KeyAPrivate) today:start];
+    RSLines *lines = [[[RSLines alloc] initWithFolder:Temp(@"reading-lines")] autorelease];
+    [lines keepWord:@"обмануть" lemma:@"обману\u0301ть" gloss:@"deceive" rank:3000 inLine:@"Он не хотел обмануть друга." before:nil video:@"2026-11-09-1"
+             title:@"Честный студент" start:3 end:0 today:start + 1 problem:&problem];
+    struct tm tm = { 0 };
+    tm.tm_year = 2026 - 1900; tm.tm_mon = 10; tm.tm_mday = 10; tm.tm_hour = 21; tm.tm_isdst = -1;
+    NSString *text = RSReportText([reopened current], reopened, lines, mktime(&tm));
+    CHECK(Has(text, @"\nRead (day | story | reads of 3 | times | recorded):\n2026-11-10 | Честный студент | reads 3 | 4:00 · 3:05 · 2:50 | recorded\n"),
+          "the read section:\n%s", [text UTF8String]);
+    CHECK(Has(text, @"\nReading words kept (word (lemma) | gloss | the sentence):\n2026-11-09-1 | обмануть (обману\u0301ть) | deceive | in: Он не хотел обмануть друга.\n") &&
+          !Has(text, @"\nWords kept (word"), "the reading's words, apart from the videos':\n%s", [text UTF8String]);
+    CHECK(RSIsReadingKey(@"2026-11-09-1") && RSIsReadingKey(@"2026-11-09-12") && !RSIsReadingKey(@"JE4cI_Knzvc") && !RSIsReadingKey(@"2026-11-09") && !RSIsReadingKey(@"2026-13-09-1"),
+          "reading keys");
+
+    // Merged between Macs: more reads win, then the later day.
+    NSDictionary *mine = [NSDictionary dictionaryWithObject:[NSDictionary dictionaryWithObjectsAndKeys:
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithInt:2], @"reads", [NSNumber numberWithLong:start], @"day", nil], @"2026-11-09-1",
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithInt:3], @"reads", [NSNumber numberWithLong:start], @"day", nil], @"2026-11-09-2", nil] forKey:@"readings"];
+    NSDictionary *theirs = [NSDictionary dictionaryWithObject:[NSDictionary dictionaryWithObjectsAndKeys:
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithInt:3], @"reads", [NSNumber numberWithLong:start], @"day", nil], @"2026-11-09-1",
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithInt:3], @"reads", [NSNumber numberWithLong:start + 1], @"day", nil], @"2026-11-09-2",
+        [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithInt:1], @"reads", [NSNumber numberWithLong:start], @"day", nil], @"2026-11-09-3", nil] forKey:@"readings"];
+    NSDictionary *merged = [[RSMerge state:mine with:theirs] objectForKey:@"readings"];
+    CHECK([merged count] == 3 && [[[merged objectForKey:@"2026-11-09-1"] objectForKey:@"reads"] intValue] == 3 &&
+          [[[merged objectForKey:@"2026-11-09-2"] objectForKey:@"day"] longValue] == start + 1 && [[[merged objectForKey:@"2026-11-09-3"] objectForKey:@"reads"] intValue] == 1,
+          "readings merge: more reads, then the later day; one only there comes in");
+    CHECK([[[RSMerge state:mine with:mine] objectForKey:@"readings"] isEqual:[mine objectForKey:@"readings"]], "merging with oneself changes nothing");
+}
+
 static void TestSay(void)
 {
     NSString *folder = Temp(@"say");
@@ -1079,9 +1323,10 @@ static void TestSay(void)
           [[RSSayLengths(9) objectAtIndex:0] intValue] == 120, "the three settings, and the default for an unknown one");
 
     // The month's recording: the first kept, never overwritten; last month's found.
-    NSString *pass = [say passPath:3];
+    NSString *pass = [say passPath:3 forDay:day];
     [@"sound" writeToFile:pass atomically:YES encoding:NSUTF8StringEncoding error:NULL];
-    CHECK([say hasPass:3] && ![say hasPass:2], "a pass on disk");
+    CHECK([say hasPass:3 forDay:day] && ![say hasPass:2 forDay:day] && ![say hasPass:3 forDay:day + 1] && [pass hasSuffix:@"Recordings/2026-11-03/pass-3.m4a"],
+          "a pass on disk, in its day's folder");
     CHECK(![say hasMonthRecordingForDay:day] && [say keepMonthRecording:pass forDay:day] && [say hasMonthRecordingForDay:day] &&
           [[say monthRecordingPathForDay:day] hasSuffix:@"Recordings/2026-11.m4a"], "kept as November's");
     [@"later" writeToFile:pass atomically:YES encoding:NSUTF8StringEncoding error:NULL];
@@ -1097,9 +1342,23 @@ static void TestSay(void)
     CHECK([[say previousMonthRecordingBeforeDay:december month:&month] hasSuffix:@"2026-11.m4a"], "the newest earlier month wins");
     CHECK([RSMonthText(day) isEqualToString:@"2026-11"], "month text");
 
-    // Today's passes go at midnight.
-    [say clearPassesNotFrom:day + 1];
-    CHECK(![say hasPass:3], "a pass from another day is cleared");
+    // The day's recordings stay, with labels; reads and free recordings beside the passes.
+    [say labelRecording:pass as:@"Мой день, pass 3"];
+    NSString *read = [say readPath:2 forReading:@"2026-11-09-1" day:day];
+    [@"read" writeToFile:read atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    [say labelRecording:read as:@"Честный студент, read 2 of 3"];
+    NSString *free1 = [say newFreeRecordingPathForDay:day + 1];
+    [@"free" writeToFile:free1 atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    CHECK([read hasSuffix:@"2026-11-03/read-2026-11-09-1-2.m4a"] && [free1 hasSuffix:@"2026-11-04/free-1.m4a"] &&
+          [[say newFreeRecordingPathForDay:day + 1] hasSuffix:@"free-2.m4a"], "paths for reads and free recordings");
+    CHECK([[say labelForRecording:pass] isEqualToString:@"Мой день, pass 3"] && [say labelForRecording:free1] == nil, "labels");
+    [say labelRecording:pass as:@"Мой день, pass 3 (again)"];
+    [say labelRecording:read as:@""];
+    NSArray *all = [say recordings];
+    CHECK([all count] == 3 && [[(RSRecording *)[all objectAtIndex:0] name] isEqualToString:@"free-1.m4a"] && [(RSRecording *)[all objectAtIndex:0] day] == day + 1 &&
+          [(RSRecording *)[all objectAtIndex:1] day] == day && [[(RSRecording *)[all objectAtIndex:1] label] isEqualToString:@"Мой день, pass 3 (again)"] &&
+          [(RSRecording *)[all objectAtIndex:2] label] == nil, "every recording, newest day first, labels as last written (%lu)", (unsigned long)[all count]);
+    CHECK([say hasPass:3 forDay:day], "nothing is cleared at midnight any more");
 
     // Notes for the tutor, under the day's heading.
     CHECK([say addTutorNote:@"  я путаю винительный и родительный \n" day:day] && [say addTutorNote:@"глагол «класть»" day:day] &&
@@ -1121,6 +1380,18 @@ static void TestSay(void)
     RSLibrary *again = [[[RSLibrary alloc] initWithFolder:lib aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
     CHECK([[[again sayOnDay:day] objectForKey:@"passes"] intValue] == 3 && [[[again sayOnDay:day] objectForKey:@"island"] isEqualToString:@"Мой день"] &&
           [[again sayDays] count] == 2 && [[[again sayDays] objectAtIndex:0] longValue] == day - 1, "said days are saved, in order");
+    // More rounds on a day, whenever: kept under the first.
+    [again recordSayOnDay:day island:@"Еда" passes:1 recorded:YES round:2];
+    [again recordSayOnDay:day island:@"Еда" passes:3 recorded:YES round:2];
+    [again recordSayOnDay:day island:@"Непал" passes:2 recorded:NO round:3];
+    [again recordSayOnDay:day + 5 island:@"Непал" passes:3 recorded:NO round:2];      // a day with no first round
+    [again save];
+    RSLibrary *third = [[[RSLibrary alloc] initWithFolder:lib aesKey:TestAES() publicKey:Hex(KeyAPublic)] autorelease];
+    NSArray *more = [[third sayOnDay:day] objectForKey:@"more"];
+    CHECK([[[third sayOnDay:day] objectForKey:@"island"] isEqualToString:@"Мой день"] && [more count] == 2 &&
+          [[[more objectAtIndex:0] objectForKey:@"island"] isEqualToString:@"Еда"] && [[[more objectAtIndex:0] objectForKey:@"passes"] intValue] == 3 &&
+          [[[more objectAtIndex:1] objectForKey:@"island"] isEqualToString:@"Непал"] && [[[third sayOnDay:day + 5] objectForKey:@"island"] length] == 0,
+          "later rounds under \"more\", the first untouched");
 }
 
 // ---- Cutting a line's sound ------------------------------------------------
@@ -1320,6 +1591,8 @@ int main(int argc, const char *argv[])
         TestLines();
         TestDictionary(fixtures);
         TestClips(fixtures);
+        TestMadeSubtitles(fixtures);
+        TestReading();
         TestSay();
         TestClip();
         TestCommandLines();

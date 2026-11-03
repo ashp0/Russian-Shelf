@@ -1,12 +1,25 @@
 #import "RSSay.h"
 #import "RSDate.h"
 #import "RSReport.h"
+#import "RSClip.h"
 
 NSString *const RSSayFolderName = @"Say";
 const NSUInteger RSSaySettings = 3;
 
 static NSString *const RSIslandsFile = @"Islands.txt", *const RSTutorFile = @"Tutor.txt";
-static NSString *const RSTodayFolder = @"Today", *const RSRecordingsFolder = @"Recordings";
+static NSString *const RSTodayFolder = @"Today", *const RSRecordingsFolder = @"Recordings", *const RSLabelsFile = @"labels.txt";
+
+@implementation RSRecording
+
+- (void)dealloc
+{
+    [_path release];
+    [_name release];
+    [_label release];
+    [super dealloc];
+}
+
+@end
 
 // Eight islands to begin with, for a Waterloo student: topics they'll be
 // asked about, so worth being fluent in (Shekhtman's islands).
@@ -49,8 +62,22 @@ NSString *RSMonthText(long day)
     if (!(self = [super init])) return nil;
     _folder = [folder copy];
     NSFileManager *fm = [NSFileManager defaultManager];
-    [fm createDirectoryAtPath:[folder stringByAppendingPathComponent:RSTodayFolder] withIntermediateDirectories:YES attributes:nil error:NULL];
     [fm createDirectoryAtPath:[folder stringByAppendingPathComponent:RSRecordingsFolder] withIntermediateDirectories:YES attributes:nil error:NULL];
+    // Before 2026-11-02 the day's passes lived in Today/ and went at
+    // midnight; now every day keeps its own folder. Whatever is still in
+    // Today/ moves to the day it was made.
+    NSString *today = [folder stringByAppendingPathComponent:RSTodayFolder];
+    for (NSString *name in [fm contentsOfDirectoryAtPath:today error:NULL]) {
+        NSString *path = [today stringByAppendingPathComponent:name];
+        NSDate *made = [[fm attributesOfItemAtPath:path error:NULL] fileModificationDate];
+        if (made == nil || ![[name pathExtension] isEqualToString:@"m4a"]) continue;
+        time_t t = (time_t)[made timeIntervalSince1970];
+        struct tm tm;
+        localtime_r(&t, &tm);
+        NSString *to = [[self folderForDay:RSDaysFromCivil(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday)] stringByAppendingPathComponent:name];
+        if (![fm fileExistsAtPath:to]) [fm moveItemAtPath:path toPath:to error:NULL];
+    }
+    if ([[fm contentsOfDirectoryAtPath:today error:NULL] count] == 0) [fm removeItemAtPath:today error:NULL];
     NSString *islands = [folder stringByAppendingPathComponent:RSIslandsFile];
     if (![fm fileExistsAtPath:islands]) [RSSeedIslands writeToFile:islands atomically:YES encoding:NSUTF8StringEncoding error:NULL];
     return self;
@@ -93,32 +120,103 @@ NSString *RSMonthText(long day)
     return [islands objectAtIndex:(NSUInteger)(((day % (long)[islands count]) + (long)[islands count]) % (long)[islands count])];
 }
 
-// ---- Today's passes ---------------------------------------------------------------
+// ---- The day's recordings ---------------------------------------------------------
 
-- (NSString *)passPath:(NSUInteger)pass
+- (NSString *)folderForDay:(long)day
 {
-    return [[_folder stringByAppendingPathComponent:RSTodayFolder] stringByAppendingPathComponent:
-            [NSString stringWithFormat:@"pass-%lu.m4a", (unsigned long)pass]];
+    NSString *folder = [[_folder stringByAppendingPathComponent:RSRecordingsFolder] stringByAppendingPathComponent:RSDayNumberText(day)];
+    [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:NULL];
+    return folder;
 }
 
-- (BOOL)hasPass:(NSUInteger)pass
+- (NSString *)passPath:(NSUInteger)pass forDay:(long)day
 {
-    return [[NSFileManager defaultManager] fileExistsAtPath:[self passPath:pass]];
+    return [[self folderForDay:day] stringByAppendingPathComponent:[NSString stringWithFormat:@"pass-%lu.m4a", (unsigned long)pass]];
 }
 
-- (void)clearPassesNotFrom:(long)day
+- (BOOL)hasPass:(NSUInteger)pass forDay:(long)day
+{
+    return [[NSFileManager defaultManager] fileExistsAtPath:[self passPath:pass forDay:day]];
+}
+
+- (NSString *)readPath:(NSUInteger)read forReading:(NSString *)key day:(long)day
+{
+    return [[self folderForDay:day] stringByAppendingPathComponent:[NSString stringWithFormat:@"read-%@-%lu.m4a", key, (unsigned long)read]];
+}
+
+- (NSString *)newFreeRecordingPathForDay:(long)day
+{
+    NSString *folder = [self folderForDay:day];
+    for (NSUInteger n = 1; ; n++) {
+        NSString *path = [folder stringByAppendingPathComponent:[NSString stringWithFormat:@"free-%lu.m4a", (unsigned long)n]];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:path]) return path;
+    }
+}
+
+// labels.txt beside a recording: "<file> | <label>", a line each.
+- (NSDictionary *)labelsIn:(NSString *)folder
+{
+    NSString *text = [NSString stringWithContentsOfFile:[folder stringByAppendingPathComponent:RSLabelsFile] encoding:NSUTF8StringEncoding error:NULL];
+    NSMutableDictionary *labels = [NSMutableDictionary dictionary];
+    for (NSString *line in [text ?: @"" componentsSeparatedByString:@"\n"]) {
+        NSRange bar = [line rangeOfString:@" | "];
+        if (bar.location == NSNotFound) continue;
+        NSString *name = [[line substringToIndex:bar.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        NSString *label = [[line substringFromIndex:NSMaxRange(bar)] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if ([name length] && [label length]) [labels setObject:label forKey:name];
+    }
+    return labels;
+}
+
+- (void)labelRecording:(NSString *)path as:(NSString *)label
+{
+    NSString *folder = [path stringByDeletingLastPathComponent], *name = [path lastPathComponent];
+    NSString *one = [[[label componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]] componentsJoinedByString:@" "]
+                     stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    NSMutableDictionary *labels = [NSMutableDictionary dictionaryWithDictionary:[self labelsIn:folder]];
+    if ([one length]) [labels setObject:one forKey:name]; else [labels removeObjectForKey:name];
+    NSMutableString *text = [NSMutableString string];
+    for (NSString *n in [[labels allKeys] sortedArrayUsingSelector:@selector(compare:)]) [text appendFormat:@"%@ | %@\n", n, [labels objectForKey:n]];
+    [text writeToFile:[folder stringByAppendingPathComponent:RSLabelsFile] atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+}
+
+- (NSString *)labelForRecording:(NSString *)path
+{
+    return [[self labelsIn:[path stringByDeletingLastPathComponent]] objectForKey:[path lastPathComponent]];
+}
+
+- (NSArray *)recordings
 {
     NSFileManager *fm = [NSFileManager defaultManager];
-    NSString *today = [_folder stringByAppendingPathComponent:RSTodayFolder];
-    for (NSString *name in [fm contentsOfDirectoryAtPath:today error:NULL]) {
-        NSString *path = [today stringByAppendingPathComponent:name];
-        NSDate *made = [[fm attributesOfItemAtPath:path error:NULL] fileModificationDate];
-        if (made == nil) continue;
-        time_t t = (time_t)[made timeIntervalSince1970];
-        struct tm tm;
-        localtime_r(&t, &tm);
-        if (RSDaysFromCivil(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday) != day) [fm removeItemAtPath:path error:NULL];
+    NSString *recordings = [_folder stringByAppendingPathComponent:RSRecordingsFolder];
+    NSMutableArray *found = [NSMutableArray array];
+    NSArray *days = [[fm contentsOfDirectoryAtPath:recordings error:NULL] sortedArrayUsingSelector:@selector(compare:)];
+    for (NSString *dayName in [days reverseObjectEnumerator]) {
+        int ok = 0;
+        long day = RSParseDay([dayName UTF8String], &ok);
+        if (!ok) continue;
+        NSString *folder = [recordings stringByAppendingPathComponent:dayName];
+        NSDictionary *labels = [self labelsIn:folder];
+        NSMutableArray *files = [NSMutableArray array];
+        for (NSString *name in [fm contentsOfDirectoryAtPath:folder error:NULL])
+            if ([[name pathExtension] isEqualToString:@"m4a"]) [files addObject:name];
+        // In the order made.
+        [files sortUsingComparator:^NSComparisonResult(id a, id b) {
+            NSDate *da = [[fm attributesOfItemAtPath:[folder stringByAppendingPathComponent:a] error:NULL] fileModificationDate];
+            NSDate *db = [[fm attributesOfItemAtPath:[folder stringByAppendingPathComponent:b] error:NULL] fileModificationDate];
+            NSComparisonResult c = [da compare:db];
+            return c != NSOrderedSame ? c : [a compare:b];
+        }];
+        for (NSString *name in files) {
+            RSRecording *r = [[[RSRecording alloc] init] autorelease];
+            [r setPath:[folder stringByAppendingPathComponent:name]];
+            [r setName:name];
+            [r setLabel:[labels objectForKey:name]];
+            [r setDay:day];
+            [found addObject:r];
+        }
     }
+    return found;
 }
 
 // ---- The month's recording ------------------------------------------------------------

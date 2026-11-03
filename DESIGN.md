@@ -163,3 +163,35 @@ sealed-format headers and the Study folder `Russian/` stay. `make` installs noth
 3. Clip mode.
 4. Say window (islands, 4·3·2, recordings, month's recording, For the tutor); report sections.
 5. Sync between Macs.
+
+## 2026-11-02: the overhaul (the owner's three requests, and two more that evening)
+
+Requests in `~/Study/Desk/Requests/2026-11-02-shelf-*.md` (slower speeds, fast videos only with matching subtitles, a
+weekly Reading shelf), plus, said while it was built: listen back to themselves and record on their own; shadowing
+and speaking practice whenever, not once a day ("aiming to speak spontaneously… B2 by summer"). What the app does now:
+
+- **Speed ladder** (RSPlayer): − and = step 1.0, 0.9, 0.8, 0.7, 0.6, 0.5 (Spectral pitch), the note says "0.6×"; the
+  speed is remembered per video (`rate` in State.plist) and the slowest ever chosen goes to the report (`slowest 0.6`
+  on the help row: Zhao 1997, let the listener set the rate, then fade it). A fast video's clip runs its passes at
+  0.6 → 0.8 → 1.0; other clips at 1.0; − = override; the say-along plays back as said.
+- **Clips on real sentences** (RSSubtitles `sentencesFrom:to:`): a cue without a stop joins the next within a second
+  unless that opens a turn, at most two to a unit; K and W in a clip act on the unit. **Never on automatic captions**:
+  `RSChooseClip` skips them, C says why, the desk card names the video. The skill's made subtitles arrive as
+  `Russian/Subtitles/<id>.vtt` and are used only while their SHA-256 matches a `subtitles:` line sealed in the shelf
+  (RSShelf `subtitleHashes`, RSLibrary `takeMadeSubtitles:`, checked again on every read).
+- **Shadowing whenever**: C in the player starts a clip from the line being said (`RSClipFromLine`); ⌘K after
+  today's clip is done chooses the next stretch. The desk card still names one clip a day.
+- **Reading** (RSReading, RSReadingWindow, ⌘D): `Russian/reading.signed` is a sealed "Russian Reading 1" list (the
+  same outer format and key as a shelf; `shelfsign seal` tells them apart by the first line) of up to seven readings;
+  one a day from its start, the last staying up. A sheet in Georgia with stress marks (A toggles), W/K on a clicked
+  word (cards under the reading's key `<start>-<n>`, no sound: read aloud instead), three reads (silent; aloud
+  recorded; aloud recorded, then 2 and 3 played back). Times go to the report's `Read` section only. The retell:
+  Say's topic for the day, with a fourth half-minute pass for the lesson and the story's own line after.
+- **Say whenever, and the recordings** (RSSay, RSSayWindow): ↑ ↓ pick any island (or a waiting retell) for another
+  round (`more` under the day in State.plist; `round 2` lines in the report). Every recording is kept in
+  `Say/Recordings/YYYY-MM-DD/` with a label (`labels.txt`), listed with R (play, name, N records on one's own); only
+  the month's recording syncs. Nothing is deleted.
+
+Locks unchanged: the seal (readings and subtitles are sealed too), no browser, no scores (the reading shows "read 2 of
+3" and a clock, never a speed), 12 videos. What loosened on purpose: the clip and Say are no longer once a day, at the
+owner's ask; the desk card still proposes one of each.

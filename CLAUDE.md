@@ -13,7 +13,16 @@ lines and words, sound first, 1·3·7·16·35·75 days, fifteen kept and sixty h
 counting the other Mac, no keeping while 45 wait, both ways once a card has words), and
 **Say** (⌘S: islands in `Say/Islands.txt`, 2·1½·1 passes with a sand-glass and the
 microphone, hear it back, Tab a note for the tutor, the month's recording, M last
-month's then today's). The list is encrypted and signed so the user can't edit it; that
+month's then today's; since 2026-11-02 another round on any island whenever (↑ ↓),
+every recording kept by day and listed (R), recordings made on their own (N), a fourth
+lesson pass when retelling a reading), and **Reading** (⌘D, 2026-11-02: six sealed
+stories with a lesson and a poem a week in `Russian/reading.signed`, Georgia on paper,
+stress marks (A), W/K on a clicked word, three reads: silent, aloud recorded, aloud
+recorded then both played back; then Say retells it). The player's − and = step a speed
+ladder 1.0…0.5 remembered per video (a fast video's clip climbs 0.6, 0.8, 1.0); C starts a
+clip from any line; clips use whole sentences and never YouTube's automatic captions
+(the skill seals made subtitles with `subtitles: <id> <sha256>` lines, served from
+`Russian/Subtitles/<id>.vtt`). The list is encrypted and signed so the user can't edit it; that
 was their idea ("so I have no control over it so I don't doomscroll"). The owner is
 A2–B1 (structure ahead, vocabulary behind, speaks in fragments): size things for that,
 not for a beginner, but keep easy Russian as most of the shelf (~60/30/10 easy /
@@ -88,6 +97,13 @@ media-subscriptions-prefpane. Never push it anywhere public.
 - Easy Russian's channel is `@EasyRussianVideos`.
 
 ## Still untested on the real Mac Pro
+
+- 2026-11-02 (the overhaul, branch overhaul: speed ladder, sealed subtitles and sentence
+  units, Reading, Say rounds and recordings): tests (`make SDK=/ test`) and shots only;
+  nobody has pressed − = C ⌘D R N on the real Mac, read aloud into the microphone, or
+  heard a read played back. No reading list has been sealed yet: the skill on the MacBook
+  needs the formats in `README.md` ("The readings", `subtitles:` lines) and the Desk
+  request `2026-11-02-shelf-app-formats.md`.
 
 - 2026-10-31 (battery, branch shelf-battery): the quiet-round skips (no `git archive`,
   no publish while nothing changed) ran against a local bare repo and in the suite,

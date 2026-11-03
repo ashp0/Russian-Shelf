@@ -28,6 +28,8 @@
 #import "RSDictionary.h"
 #import "RSSay.h"
 #import "RSSayWindow.h"
+#import "RSReading.h"
+#import "RSReadingWindow.h"
 
 static const char *KeyPrivate =
     "-----BEGIN EC PRIVATE KEY-----\n"
@@ -357,13 +359,15 @@ int main(int argc, const char *argv[])
         Spin(1.4);
         // Working on one line: looped, slower, then kept.
         [player setTimeForTesting:8.0];
-        [player toggleSlower];
+        [player stepSlower];
+        [player stepSlower];
         [player toggleLoop];
         [player revealLine];
         printf("  looping  %s\n", [player looping] ? "yes" : "no");
         ShootBoth([player window], out, @"player-loop");
         [player toggleLoop];
-        [player toggleSlower];
+        [player stepFaster];
+        [player stepFaster];
         [player setTimeForTesting:16.0];
         [player keepLine];
         printf("  kept     %s\n", [[player visibleNote] UTF8String]);
@@ -528,7 +532,66 @@ int main(int argc, const char *argv[])
         [say2 toggleIslands];
         ShootBoth([say2 window], out, @"say-islands");
         [say2 toggleIslands];
+        // Another topic, whenever: a second round; the recordings list; one made on its own.
+        [say2 chooseTopic:1];
+        printf("  say      round %lu, topic %s\n", (unsigned long)[say2 round], [[say2 topic] UTF8String]);
+        ShootBoth([say2 window], out, @"say-round2");
+        [say2 toggleRecordings];
+        ShootBoth([say2 window], out, @"say-recordings");
+        [say2 recordFree];
+        ShootBoth([say2 window], out, @"say-recording");
+        [say2 recordFree];
+        printf("  say      recordings: selected %ld, %s\n", (long)[say2 selectedRecording], [[say2 visibleNote] UTF8String]);
+        ShootBoth([say2 window], out, @"say-recorded");
+        [say2 toggleRecordings];
         [say2 close];
+
+        // Reading: the day's story, a word looked up, a read running, done; the poem.
+        NSString *readingText = @"Russian Reading 1\nstart: 2026-10-14\nsealed: 2026-10-13 20:15:07\n"
+            @"story: 1 | Че\u0301стный студе\u0301нт | Че\u0301стность доро\u0301же оце\u0301нки.\nnew: обману\u0301ть, экза\u0301мен\n"
+            @"Жил-был студе\u0301нт. Его\u0301 зва\u0301ли Ва\u0301ся. Он учи\u0301лся в университе\u0301те и о\u0301чень люби\u0301л спать.\n"
+            @"Одна\u0301жды у\u0301тром он просну\u0301лся и по\u0301нял: сего\u0301дня экза\u0301мен! Но он ничего\u0301 не чита\u0301л.\n\n"
+            @"«Что де\u0301лать?» — поду\u0301мал Ва\u0301ся. Друг сказа\u0301л: «Напиши\u0301 отве\u0301ты на руке\u0301». Но Ва\u0301ся не хоте\u0301л обману\u0301ть учи\u0301теля.\n"
+            @"Он пошёл на экза\u0301мен и че\u0301стно сказа\u0301л: «Я не гото\u0301в». Учи\u0301тель улыбну\u0301лся и дал ему\u0301 ещё одну\u0301 неде\u0301лю.\n\n"
+            @"Мора\u0301ль: че\u0301стность доро\u0301же оце\u0301нки.\n"
+            @"story: 2 | Терпе\u0301ние | Терпе\u0301ние — ключ.\nЖила\u0301-была\u0301 де\u0301вочка. Она\u0301 хоте\u0301ла всё сра\u0301зу. Коне\u0301ц.\n"
+            @"poem: Стрекоза\u0301 и Мураве\u0301й | Ива\u0301н Крыло\u0301в, 1808 | Кто ле\u0301том поёт, тот зимо\u0301й голода\u0301ет.\nmetre: четырёхстопный хорей, парная рифма\n"
+            @"Попрыгу\u0301нья Стрекоза\u0301\nЛе\u0301то кра\u0301сное пропе\u0301ла;\nОгляну\u0301ться не успе\u0301ла,\nКак зима\u0301 кати\u0301т в глаза\u0301.\n";
+        NSData *readingFile = RSSealText(readingText, AES(), iv, ^NSData *(NSData *message, NSString **why) { return Sign(message); }, &problem);
+        printf("  reading  offered: %d (%s)\n", (int)[library offerReadingFile:readingFile today:RSToday()], [[library readingNotice] UTF8String]);
+        [c reloadRows];
+        ShootBoth([c window], out, @"shelf-with-reading");
+        RSReadingWindow *rw = [c showReading];
+        [rw setSilentForTesting];
+        [[rw window] orderOut:nil];
+        printf("  reading  %s: state %d\n", [[[rw item] title] UTF8String], (int)[rw state]);
+        ShootBoth([rw window], out, @"reading");
+        [rw setCaretForTesting:72];
+        [rw toggleWordSlip];
+        ShootBoth([rw window], out, @"reading-word");
+        printf("  reading  kept: %s\n", [({ [rw keepSlipWord]; [rw visibleNote]; }) UTF8String]);
+        [rw toggleWordSlip];
+        [rw toggleStress];
+        ShootBoth([rw window], out, @"reading-plain");
+        [rw toggleStress];
+        [rw space];
+        [rw setSecondsForTesting:65];
+        ShootBoth([rw window], out, @"reading-read1");
+        [rw space];
+        [rw space];
+        [rw setSecondsForTesting:130];
+        ShootBoth([rw window], out, @"reading-read2");
+        [rw space];
+        [rw space];
+        [rw space];
+        printf("  reading  after three reads: state %d, %s\n", (int)[rw state], [[rw visibleNote] UTF8String]);
+        ShootBoth([rw window], out, @"reading-done");
+        [rw showItem:-1];
+        ShootBoth([rw window], out, @"reading-poem");
+        [rw close];
+        [c reloadRows];
+        printf("  say      topic now: %s\n", [[c todaysTopic] UTF8String]);
+        ShootBoth([c window], out, @"shelf-after-reading");
         [c reloadRows];
         ShootBoth([c window], out, @"shelf-after-say");
 

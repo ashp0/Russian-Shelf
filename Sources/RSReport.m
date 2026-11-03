@@ -53,6 +53,18 @@ NSString *RSDayNumberText(long day)
     return [NSString stringWithFormat:@"%04d-%02d-%02d", y, m, d];
 }
 
+BOOL RSIsReadingKey(NSString *key)
+{
+    // "2026-11-09-3": a day, a hyphen, a number.
+    if ([key length] < 12 || [key length] > 14 || [key characterAtIndex:10] != '-') return NO;
+    int ok = 0;
+    RSParseDay([[key substringToIndex:10] UTF8String], &ok);
+    if (!ok) return NO;
+    for (NSUInteger i = 11; i < [key length]; i++)
+        if ([key characterAtIndex:i] < '0' || [key characterAtIndex:i] > '9') return NO;
+    return YES;
+}
+
 static NSString *RSOneLine(NSString *text)
 {
     return [[text componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]] componentsJoinedByString:@" / "];
@@ -98,6 +110,9 @@ NSString *RSReportTextWithNotes(RSShelf *shelf, RSLibrary *library, RSLines *lin
             any += n;
             [row appendFormat:@" | %@ %lu", RSHelpName(order[k]), (unsigned long)n];
         }
+        // The slowest speed ever chosen for it, when it was slowed at all.
+        float slowest = [library slowestFor:identifier];
+        if (slowest < 1) { [row appendFormat:@" | slowest %.1f", slowest]; any++; }
         if (any) [help appendFormat:@"%@\n", row];
 
         NSString *f = [library feltFor:identifier], *w = [library wantFor:identifier];
@@ -147,10 +162,41 @@ NSString *RSReportTextWithNotes(RSShelf *shelf, RSLibrary *library, RSLines *lin
     for (NSNumber *day in [library sayDays]) {
         if ([day longValue] < [shelf start]) continue;
         NSDictionary *d = [library sayOnDay:[day longValue]];
-        [say appendFormat:@"%@ | %@ | passes %@ | %@\n", RSDayNumberText([day longValue]), [d objectForKey:@"island"],
-         [d objectForKey:@"passes"], [[d objectForKey:@"recorded"] boolValue] ? @"recorded" : @"not recorded"];
+        if ([[d objectForKey:@"island"] length])
+            [say appendFormat:@"%@ | %@ | passes %@ | %@\n", RSDayNumberText([day longValue]), [d objectForKey:@"island"],
+             [d objectForKey:@"passes"], [[d objectForKey:@"recorded"] boolValue] ? @"recorded" : @"not recorded"];
+        // Rounds the owner added on their own, whenever they liked.
+        NSArray *more = [[d objectForKey:@"more"] isKindOfClass:[NSArray class]] ? [d objectForKey:@"more"] : nil;
+        for (NSUInteger i = 0; i < [more count]; i++) {
+            NSDictionary *m = [more objectAtIndex:i];
+            if (![m isKindOfClass:[NSDictionary class]] || ![[m objectForKey:@"island"] length]) continue;
+            [say appendFormat:@"%@ | %@ | passes %@ | %@ | round %lu\n", RSDayNumberText([day longValue]), [m objectForKey:@"island"],
+             [m objectForKey:@"passes"], [[m objectForKey:@"recorded"] boolValue] ? @"recorded" : @"not recorded", (unsigned long)i + 2];
+        }
     }
     if ([say length]) [s appendFormat:@"\nSaid (day | topic | passes of 3 | recorded):\n%@", say];
+    // The week's readings: those read since the shelf began.
+    NSMutableString *read = [NSMutableString string];
+    for (NSString *key in [library readingKeys]) {
+        NSDictionary *p = [library readingProgressFor:key];
+        if ([[p objectForKey:@"day"] longValue] < [shelf start]) continue;
+        NSMutableArray *times = [NSMutableArray array];
+        for (NSNumber *t in [[p objectForKey:@"times"] isKindOfClass:[NSArray class]] ? [p objectForKey:@"times"] : [NSArray array])
+            [times addObject:RSClock([t doubleValue])];
+        BOOL recorded = NO;
+        for (NSNumber *r in [[p objectForKey:@"recorded"] isKindOfClass:[NSArray class]] ? [p objectForKey:@"recorded"] : [NSArray array])
+            recorded |= [r boolValue];
+        [read appendFormat:@"%@ | %@ | reads %@ | %@ | %@\n", RSDayNumberText([[p objectForKey:@"day"] longValue]), [p objectForKey:@"title"] ?: key,
+         [p objectForKey:@"reads"], [times count] ? [times componentsJoinedByString:@" · "] : @"-", recorded ? @"recorded" : @"not recorded"];
+    }
+    if ([read length]) [s appendFormat:@"\nRead (day | story | reads of 3 | times | recorded):\n%@", read];
+    NSMutableString *readingWords = [NSMutableString string];
+    for (RSKeptLine *line in [lines lines]) {
+        if (![line isWord] || !RSIsReadingKey([line video]) || [line kept] < [shelf start]) continue;
+        [readingWords appendFormat:@"%@ | %@ (%@) | %@ | in: %@\n", [line video], [line word], [line lemma] ?: @"",
+         RSOneLine([line gloss] ?: @""), RSOneLine([line text])];
+    }
+    if ([readingWords length]) [s appendFormat:@"\nReading words kept (word (lemma) | gloss | the sentence):\n%@", readingWords];
     if ([tutor length]) [s appendFormat:@"\nFor the tutor:\n%@%@", tutor, [tutor hasSuffix:@"\n"] ? @"" : @"\n"];
     return s;
 }

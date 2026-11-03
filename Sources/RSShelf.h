@@ -6,6 +6,12 @@
 //     start: 2026-10-12
 //     video: JE4cI_Knzvc | Sergey Storyteller | She Cut Her Hair to Save Her Husband
 //     video: ...                                          (1 to 12 of these)
+//     subtitles: JE4cI_Knzvc <sha-256, hex>                (0 or more)
+//
+// A `subtitles:` line seals the SHA-256 of a Russian subtitle file the skill
+// made for a fast video whose own track doesn't match the speech
+// (Russian/Subtitles/<id>.vtt in the study folder, RSLibrary.h): the app uses
+// that file only when its hash is the sealed one, so it can't be swapped.
 //
 // `shelfsign seal` adds a `sealed:` line (when it was sealed, to the second),
 // encrypts the text with AES-256-CTR under the key built into the app, signs
@@ -61,6 +67,7 @@ NSString *RSKindTitle(NSString *kind);
 @property (nonatomic, readonly, copy) NSString *sealed;      // "2026-10-11 20:15:07", nil until sealed
 @property (nonatomic, readonly, copy) NSArray *videos;       // RSVideo, in Claude's order
 @property (nonatomic, readonly, copy) NSString *fingerprint; // of the sealed file; nil for plain text
+@property (nonatomic, readonly, copy) NSDictionary *subtitleHashes;   // id -> SHA-256 (lowercase hex) of its made subtitles
 
 // The plain list. nil with *problem set (naming the line) if it doesn't read.
 + (RSShelf *)shelfWithText:(NSString *)text problem:(NSString **)problem;
@@ -84,6 +91,9 @@ NSString *RSKindTitle(NSString *kind);
 // "id | start | channel | title" lines (the newest line for an id wins).
 NSDictionary *RSKindsFromHistory(NSString *text);
 
+// The SHA-256 of some bytes, as 64 lowercase hex digits.
+NSString *RSSHA256Hex(NSData *data);
+
 // The signed part of a sealed file: its first line, the IV, the ciphertext.
 NSData *RSSignedMessage(NSData *iv, NSData *ciphertext);
 
@@ -91,6 +101,13 @@ NSData *RSSignedMessage(NSData *iv, NSData *ciphertext);
 // returns a DER signature of the message it's given, or nil with a problem.
 NSData *RSSealShelf(RSShelf *shelf, NSData *aesKey, NSData *iv,
                     NSData *(^sign)(NSData *message, NSString **problem), NSString **problem);
+// The same for any text (a reading list, RSReading.h): the sealed file's
+// format is the shelf's, whatever is inside.
+NSData *RSSealText(NSString *plain, NSData *aesKey, NSData *iv,
+                   NSData *(^sign)(NSData *message, NSString **problem), NSString **problem);
+// Checks a sealed file's signature and decrypts it: the text inside, or nil
+// with *problem. *fingerprint (may be NULL): the file's own fingerprint.
+NSString *RSOpenSealedText(NSData *file, NSData *aesKey, NSData *publicKey, NSString **fingerprint, NSString **problem);
 
 // Checks a sealed file's signature with `publicKey`, decrypts it with
 // `aesKey` and reads the list. nil with *problem set to one plain sentence

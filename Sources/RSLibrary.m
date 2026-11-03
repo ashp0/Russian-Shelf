@@ -1,6 +1,7 @@
 #import "RSLibrary.h"
 #import "RSDate.h"
 #import "RSSubtitles.h"
+#import "RSReading.h"
 #include <math.h>
 
 const double RSFinishedFraction = 0.9;
@@ -8,6 +9,8 @@ const double RSFinishedFraction = 0.9;
 static NSString *const RSCurrentFile = @"Shelf.signed";
 static NSString *const RSPendingFile = @"Next Shelf.signed";
 static NSString *const RSStateFile = @"State.plist";
+static NSString *const RSReadingFile = @"Reading.signed";
+static NSString *const RSPendingReadingFile = @"Next Reading.signed";
 
 BOOL RSWritePlist(id plist, NSString *path)
 {
@@ -24,6 +27,7 @@ BOOL RSWritePlist(id plist, NSString *path)
 @interface RSLibrary () {
     NSMutableDictionary *_clips;        // id -> clips worked (RSClips.h)
     NSMutableDictionary *_say;          // "day" -> {island, passes, recorded} (RSSay.h)
+    NSMutableDictionary *_readings;     // key -> {reads, times, recorded, day, title} (RSReading.h)
     NSData *_aesKey, *_publicKey;
     NSMutableDictionary *_watched;      // id -> {position, furthest, duration, finished}
 }
@@ -31,6 +35,9 @@ BOOL RSWritePlist(id plist, NSString *path)
 @property (nonatomic, readwrite, retain) RSShelf *current;
 @property (nonatomic, readwrite, retain) RSShelf *pending;
 @property (nonatomic, readwrite, copy) NSString *notice;
+@property (nonatomic, readwrite, retain) RSReadingSet *reading;
+@property (nonatomic, readwrite, retain) RSReadingSet *pendingReading;
+@property (nonatomic, readwrite, copy) NSString *readingNotice;
 @end
 
 @implementation RSLibrary
@@ -57,6 +64,8 @@ BOOL RSWritePlist(id plist, NSString *path)
     [fm createDirectoryAtPath:[folder stringByAppendingPathComponent:@"Videos"] withIntermediateDirectories:YES attributes:nil error:NULL];
 
     NSDictionary *state = [NSDictionary dictionaryWithContentsOfFile:[folder stringByAppendingPathComponent:RSStateFile]];
+    NSString *problem = nil;
+    NSData *file = nil;
     _watched = [[NSMutableDictionary alloc] init];
     NSDictionary *watched = [state objectForKey:@"watched"];
     if ([watched isKindOfClass:[NSDictionary class]])
@@ -75,11 +84,17 @@ BOOL RSWritePlist(id plist, NSString *path)
         for (NSString *identifier in clips)
             if ([[clips objectForKey:identifier] isKindOfClass:[NSArray class]])
                 [_clips setObject:[[[clips objectForKey:identifier] mutableCopy] autorelease] forKey:identifier];
+    _readings = [[NSMutableDictionary alloc] init];
+    [self readReadings:state];
+    if ([[state objectForKey:@"readingNotice"] isKindOfClass:[NSString class]]) _readingNotice = [[state objectForKey:@"readingNotice"] copy];
+    file = [NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:RSReadingFile]];
+    if (file) _reading = [RSOpenSealedReadingSet(file, _aesKey, _publicKey, &problem) retain];
+    file = [NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:RSPendingReadingFile]];
+    if (file) _pendingReading = [RSOpenSealedReadingSet(file, _aesKey, _publicKey, &problem) retain];
 
     // Shelves are checked again every time: a file here is no more trusted
     // than one in the study folder.
-    NSString *problem = nil;
-    NSData *file = [NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:RSCurrentFile]];
+    file = [NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:RSCurrentFile]];
     if (file) _current = [RSOpenSealedShelf(file, _aesKey, _publicKey, &problem) retain];
     file = [NSData dataWithContentsOfFile:[folder stringByAppendingPathComponent:RSPendingFile]];
     if (file) _pending = [RSOpenSealedShelf(file, _aesKey, _publicKey, &problem) retain];
@@ -94,10 +109,23 @@ BOOL RSWritePlist(id plist, NSString *path)
     [_watched release];
     [_clips release];
     [_say release];
+    [_readings release];
     [_current release];
     [_pending release];
     [_notice release];
+    [_reading release];
+    [_pendingReading release];
+    [_readingNotice release];
     [super dealloc];
+}
+
+- (void)readReadings:(NSDictionary *)state
+{
+    [_readings removeAllObjects];
+    NSDictionary *readings = [state objectForKey:@"readings"];
+    if ([readings isKindOfClass:[NSDictionary class]])
+        for (NSString *key in readings)
+            if ([[readings objectForKey:key] isKindOfClass:[NSDictionary class]]) [_readings setObject:[readings objectForKey:key] forKey:key];
 }
 
 - (BOOL)save
@@ -106,7 +134,9 @@ BOOL RSWritePlist(id plist, NSString *path)
     [state setObject:_watched forKey:@"watched"];
     if ([_clips count]) [state setObject:_clips forKey:@"clips"];
     if ([_say count]) [state setObject:_say forKey:@"say"];
+    if ([_readings count]) [state setObject:_readings forKey:@"readings"];
     if (_notice) [state setObject:_notice forKey:@"notice"];
+    if (_readingNotice) [state setObject:_readingNotice forKey:@"readingNotice"];
     return RSWritePlist(state, [_folder stringByAppendingPathComponent:RSStateFile]);
 }
 
@@ -131,6 +161,7 @@ BOOL RSWritePlist(id plist, NSString *path)
     if ([say isKindOfClass:[NSDictionary class]])
         for (NSString *day in say)
             if ([[say objectForKey:day] isKindOfClass:[NSDictionary class]]) [_say setObject:[say objectForKey:day] forKey:day];
+    [self readReadings:state];
 }
 
 - (BOOL)writeShelfFile:(NSData *)file named:(NSString *)name
@@ -190,6 +221,92 @@ BOOL RSWritePlist(id plist, NSString *path)
     return YES;
 }
 
+// ---- Readings ---------------------------------------------------------------
+
+- (RSOffer)offerReadingFile:(NSData *)file today:(long)today
+{
+    NSString *problem = nil;
+    RSReadingSet *set = RSOpenSealedReadingSet(file, _aesKey, _publicKey, &problem);
+    if (set && ([[set fingerprint] isEqualToString:[_reading fingerprint]] || [[set fingerprint] isEqualToString:[_pendingReading fingerprint]])) {
+        if (_readingNotice) { [self setReadingNotice:nil]; [self save]; }
+        return RSOfferNothingNew;
+    }
+    RSReadingSet *newest = _pendingReading ?: _reading;
+    if (set && newest && ![set isNewerThan:newest])
+        problem = [NSString stringWithFormat:@"They’re older than the readings of %@.", [newest startText]];
+    if (problem) {
+        [self setReadingNotice:[NSString stringWithFormat:@"New readings were turned away. %@", problem]];
+        [self save];
+        return RSOfferRefused;
+    }
+    [self setReadingNotice:nil];
+    RSOffer offer;
+    if (_reading == nil || [set start] <= today) {
+        [self setReading:set];
+        [self setPendingReading:nil];
+        [self writeShelfFile:file named:RSReadingFile];
+        [self writeShelfFile:nil named:RSPendingReadingFile];
+        offer = RSOfferTaken;
+    } else {
+        [self setPendingReading:set];
+        [self writeShelfFile:file named:RSPendingReadingFile];
+        offer = RSOfferQueued;
+    }
+    [self save];
+    return offer;
+}
+
+- (BOOL)advanceReadingToDay:(long)today
+{
+    if (_pendingReading == nil || [_pendingReading start] > today) return NO;
+    NSData *file = [NSData dataWithContentsOfFile:[_folder stringByAppendingPathComponent:RSPendingReadingFile]];
+    if (file == nil || ![self writeShelfFile:file named:RSReadingFile]) return NO;
+    [self setReading:_pendingReading];
+    [self setPendingReading:nil];
+    [self writeShelfFile:nil named:RSPendingReadingFile];
+    return YES;
+}
+
+- (RSReadingItem *)readingForDay:(long)day
+{
+    return [_reading itemForDay:day];
+}
+
+- (NSDictionary *)readingProgressFor:(NSString *)key
+{
+    return key ? [_readings objectForKey:key] : nil;
+}
+
+- (void)recordRead:(NSString *)key title:(NSString *)title read:(NSUInteger)n seconds:(double)seconds recorded:(BOOL)recorded day:(long)day
+{
+    if ([key length] == 0 || n < 1 || n > 3) return;
+    NSDictionary *was = [_readings objectForKey:key];
+    NSMutableArray *times = [NSMutableArray arrayWithArray:[[was objectForKey:@"times"] isKindOfClass:[NSArray class]] ? [was objectForKey:@"times"] : [NSArray array]];
+    NSMutableArray *recs = [NSMutableArray arrayWithArray:[[was objectForKey:@"recorded"] isKindOfClass:[NSArray class]] ? [was objectForKey:@"recorded"] : [NSArray array]];
+    while ([times count] < n) [times addObject:[NSNumber numberWithDouble:0]];
+    while ([recs count] < n) [recs addObject:[NSNumber numberWithBool:NO]];
+    [times replaceObjectAtIndex:n - 1 withObject:[NSNumber numberWithDouble:MAX(0, seconds)]];
+    [recs replaceObjectAtIndex:n - 1 withObject:[NSNumber numberWithBool:recorded]];
+    NSUInteger reads = MAX(n, [[was objectForKey:@"reads"] unsignedIntegerValue]);
+    [_readings setObject:[NSDictionary dictionaryWithObjectsAndKeys:
+        [NSNumber numberWithUnsignedInteger:reads], @"reads", times, @"times", recs, @"recorded",
+        [NSNumber numberWithLong:day], @"day", title ?: [was objectForKey:@"title"] ?: @"", @"title", nil] forKey:key];
+}
+
+- (NSArray *)readingKeys
+{
+    return [[_readings allKeys] sortedArrayUsingSelector:@selector(compare:)];
+}
+
+- (NSString *)readingFinishedOnDay:(long)day
+{
+    for (NSString *key in [self readingKeys]) {
+        NSDictionary *p = [_readings objectForKey:key];
+        if ([[p objectForKey:@"reads"] unsignedIntegerValue] >= 3 && [[p objectForKey:@"day"] longValue] == day) return key;
+    }
+    return nil;
+}
+
 // ---- Files ---------------------------------------------------------------
 
 - (NSString *)videoFolder:(NSString *)identifier
@@ -205,6 +322,57 @@ BOOL RSWritePlist(id plist, NSString *path)
 - (NSString *)subtitlesPath:(NSString *)identifier
 {
     return [[self videoFolder:identifier] stringByAppendingPathComponent:@"subtitles.vtt"];
+}
+
+- (NSString *)madeSubtitlesPath:(NSString *)identifier
+{
+    return [[_folder stringByAppendingPathComponent:@"Subtitles"] stringByAppendingPathComponent:[identifier stringByAppendingPathExtension:@"vtt"]];
+}
+
+- (NSString *)sealedSubtitleHashFor:(NSString *)identifier
+{
+    if ([identifier length] == 0) return nil;
+    return [[_current subtitleHashes] objectForKey:identifier] ?: [[_pending subtitleHashes] objectForKey:identifier];
+}
+
+// The made subtitles' bytes, if they're here and still the sealed ones.
+- (NSData *)madeSubtitlesFor:(NSString *)identifier
+{
+    NSString *hash = [self sealedSubtitleHashFor:identifier];
+    if (hash == nil) return nil;
+    NSData *vtt = [NSData dataWithContentsOfFile:[self madeSubtitlesPath:identifier]];
+    return vtt && [RSSHA256Hex(vtt) isEqualToString:hash] ? vtt : nil;
+}
+
+- (BOOL)takeMadeSubtitles:(NSData *)vtt for:(NSString *)identifier
+{
+    NSString *hash = [self sealedSubtitleHashFor:identifier];
+    if (vtt == nil || hash == nil || ![RSSHA256Hex(vtt) isEqualToString:hash]) return NO;
+    if ([self madeSubtitlesFor:identifier]) return NO;       // here already
+    NSString *text = [[[NSString alloc] initWithData:vtt encoding:NSUTF8StringEncoding] autorelease];
+    RSSubtitles *parsed = text ? [RSSubtitles subtitlesWithVTT:text] : nil;
+    if ([[parsed lines] count] == 0 || [parsed automatic]) return NO;
+    NSString *path = [self madeSubtitlesPath:identifier];
+    [[NSFileManager defaultManager] createDirectoryAtPath:[path stringByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:NULL];
+    return [vtt writeToFile:path atomically:YES];
+}
+
+- (RSSubtitles *)subtitlesFor:(NSString *)identifier
+{
+    NSData *made = [self madeSubtitlesFor:identifier];
+    if (made) {
+        NSString *text = [[[NSString alloc] initWithData:made encoding:NSUTF8StringEncoding] autorelease];
+        RSSubtitles *parsed = text ? [RSSubtitles subtitlesWithVTT:text] : nil;
+        if ([[parsed lines] count]) return parsed;
+    }
+    return [RSSubtitles subtitlesWithFile:[self subtitlesPath:identifier]];
+}
+
+- (NSString *)subtitlesKindFor:(NSString *)identifier
+{
+    if ([self madeSubtitlesFor:identifier]) return @"sealed";
+    NSString *kind = [[self infoFor:identifier] objectForKey:@"subtitles"];
+    return [kind isKindOfClass:[NSString class]] ? kind : @"none";
 }
 
 - (NSString *)thumbnailPath:(NSString *)identifier
@@ -327,6 +495,10 @@ static NSString *RSFirstFile(NSString *folder, NSString *prefix, NSArray *extens
                 [removed addObject:identifier];
         }
     }
+    NSString *subtitles = [_folder stringByAppendingPathComponent:@"Subtitles"];
+    for (NSString *name in [fm contentsOfDirectoryAtPath:subtitles error:NULL])
+        if (![keep containsObject:[name stringByDeletingPathExtension]])
+            [fm removeItemAtPath:[subtitles stringByAppendingPathComponent:name] error:NULL];
     for (NSString *identifier in [_watched allKeys])
         if (![keep containsObject:identifier]) [_watched removeObjectForKey:identifier];
     [self save];
@@ -482,6 +654,33 @@ static NSString *RSOneOf(id value, NSArray *allowed)
     [_watched setObject:w forKey:identifier];
 }
 
+static float RSRateIn(NSDictionary *w, NSString *key)
+{
+    id v = [w objectForKey:key];
+    float rate = [v isKindOfClass:[NSNumber class]] ? [v floatValue] : 0;
+    return rate > 0.25f && rate <= 1 ? rate : 1;
+}
+
+- (float)rateFor:(NSString *)identifier
+{
+    return RSRateIn([_watched objectForKey:identifier], @"rate");
+}
+
+- (float)slowestFor:(NSString *)identifier
+{
+    return RSRateIn([_watched objectForKey:identifier], @"slowest");
+}
+
+- (void)setRate:(float)rate for:(NSString *)identifier
+{
+    if ([identifier length] == 0 || !(rate > 0.25f && rate <= 1)) return;
+    NSMutableDictionary *w = [NSMutableDictionary dictionaryWithDictionary:[_watched objectForKey:identifier] ?: [NSDictionary dictionary]];
+    if (rate >= 1) [w removeObjectForKey:@"rate"]; else [w setObject:[NSNumber numberWithFloat:rate] forKey:@"rate"];
+    float slowest = RSRateIn(w, @"slowest");
+    if (rate < slowest) [w setObject:[NSNumber numberWithFloat:rate] forKey:@"slowest"];
+    [_watched setObject:w forKey:identifier];
+}
+
 - (NSUInteger)help:(RSHelp)kind for:(NSString *)identifier
 {
     return [[[_watched objectForKey:identifier] objectForKey:RSHelpKey(kind)] unsignedIntegerValue];
@@ -540,9 +739,26 @@ static NSString *RSOneOf(id value, NSArray *allowed)
 
 - (void)recordSayOnDay:(long)day island:(NSString *)island passes:(NSUInteger)passes recorded:(BOOL)recorded
 {
-    [_say setObject:[NSDictionary dictionaryWithObjectsAndKeys:island ?: @"", @"island",
-                     [NSNumber numberWithUnsignedInteger:passes], @"passes", [NSNumber numberWithBool:recorded], @"recorded", nil]
-             forKey:[NSString stringWithFormat:@"%ld", day]];
+    [self recordSayOnDay:day island:island passes:passes recorded:recorded round:1];
+}
+
+- (void)recordSayOnDay:(long)day island:(NSString *)island passes:(NSUInteger)passes recorded:(BOOL)recorded round:(NSUInteger)round
+{
+    NSString *key = [NSString stringWithFormat:@"%ld", day];
+    NSDictionary *entry = [NSDictionary dictionaryWithObjectsAndKeys:island ?: @"", @"island",
+                           [NSNumber numberWithUnsignedInteger:passes], @"passes", [NSNumber numberWithBool:recorded], @"recorded", nil];
+    NSMutableDictionary *dayEntry = [NSMutableDictionary dictionaryWithDictionary:[_say objectForKey:key] ?: [NSDictionary dictionary]];
+    if (round <= 1) {
+        [dayEntry addEntriesFromDictionary:entry];
+    } else {
+        // Round n is the (n-2)th of "more": the same topic's passes grow in place.
+        NSMutableArray *more = [NSMutableArray arrayWithArray:[[dayEntry objectForKey:@"more"] isKindOfClass:[NSArray class]] ? [dayEntry objectForKey:@"more"] : [NSArray array]];
+        while ([more count] < round - 1) [more addObject:[NSDictionary dictionary]];
+        [more replaceObjectAtIndex:round - 2 withObject:entry];
+        [dayEntry setObject:more forKey:@"more"];
+        if ([dayEntry objectForKey:@"island"] == nil) [dayEntry setObject:@"" forKey:@"island"];
+    }
+    [_say setObject:dayEntry forKey:key];
 }
 
 - (NSArray *)sayDays

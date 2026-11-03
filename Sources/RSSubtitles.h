@@ -54,6 +54,12 @@
 // The line to highlight in the transcript: the one being spoken, or the last
 // one that started.
 - (NSUInteger)indexToHighlightAtTime:(double)t;
+// The lines from `first` to `last` set as what one person said at a time,
+// for the clip's read and say-along passes: a cue that doesn't end a sentence
+// (no . ! ? … at its end) is joined with the next when that follows within a
+// second and doesn't open a new turn (a dash), at most two cues to a unit.
+// Each unit is an RSLine spanning its cues, their texts joined by a space.
+- (NSArray *)sentencesFrom:(NSUInteger)first to:(NSUInteger)last;
 
 @end
 

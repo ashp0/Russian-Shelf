@@ -336,6 +336,39 @@ static RSLine *RSMakeLine(double start, double end, NSString *text)
     return i;
 }
 
+static BOOL RSOpensTurn(NSString *text)
+{
+    NSString *t = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if ([t length] == 0) return NO;
+    unichar c = [t characterAtIndex:0];
+    return c == '-' || c == 0x2013 || c == 0x2014;
+}
+
+- (NSArray *)sentencesFrom:(NSUInteger)first to:(NSUInteger)last
+{
+    NSMutableArray *units = [NSMutableArray array];
+    NSUInteger i = first;
+    while (i <= last && i < [_lines count]) {
+        RSLine *a = [_lines objectAtIndex:i];
+        RSLine *unit = [[[RSLine alloc] init] autorelease];
+        [unit setStart:[a start]];
+        [unit setEnd:[a end]];
+        [unit setText:[a text]];
+        if (i + 1 <= last && i + 1 < [_lines count] &&
+            !RSEndsSentence([[a text] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]])) {
+            RSLine *b = [_lines objectAtIndex:i + 1];
+            if ([b start] - [a end] < 1.0 && !RSOpensTurn([b text])) {
+                [unit setEnd:MAX([a end], [b end])];
+                [unit setText:[NSString stringWithFormat:@"%@ %@", [a text], [b text]]];
+                i++;
+            }
+        }
+        [units addObject:unit];
+        i++;
+    }
+    return units;
+}
+
 - (NSUInteger)indexToHighlightAtTime:(double)t
 {
     NSUInteger i = [self indexAtTime:t];
