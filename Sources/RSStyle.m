@@ -1213,9 +1213,71 @@ static NSRect RSReviewCard(NSRect rect)
     [[field cell] setLineBreakMode:NSLineBreakByTruncatingTail];
 }
 
+static NSDictionary *RSReviewLineText(void)
+{
+    return RSText(RSSerif(24), RSInk(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+}
+
+// The card's body (between the heading and the foot) and, for a shown line,
+// where the line goes: drawing and clicking share it.
+static NSRect RSReviewBody(NSRect rect, NSString *source, NSString *before, BOOL note, BOOL meaningRow, CGFloat *beforeHeight)
+{
+    NSRect card = RSReviewCard(rect);
+    CGFloat pad = 24, width = NSWidth(card) - 2 * pad;
+    CGFloat top = NSMaxY(card) - 44 - 8;
+    if ([source length]) top -= 26;
+    CGFloat bottom = NSMinY(card) + (note ? 34 : 16) + (meaningRow ? 30 : 0);
+    CGFloat bh = 0;
+    if ([before length]) {
+        NSDictionary *b = RSText(RSSerifItalic(13), RSInkFaint(), NSLeftTextAlignment, NSLineBreakByWordWrapping);
+        NSString *one = [[before componentsSeparatedByString:@"\n"] componentsJoinedByString:@" "];
+        bh = MIN(36, RSHeightOf(one, b, width));
+        top -= bh + 8;
+    }
+    if (beforeHeight) *beforeHeight = bh;
+    return NSMakeRect(NSMinX(card) + pad, bottom, width, MAX(0, top - bottom));
+}
+
+static NSRect RSReviewTextRect(NSRect body, NSString *text, BOOL detail)
+{
+    CGFloat dh = detail ? 22 : 0;
+    CGFloat th = MIN(NSHeight(body) - dh, RSHeightOf(text, RSReviewLineText(), NSWidth(body)));
+    return NSMakeRect(NSMinX(body), round(NSMidY(body) - (th + dh) / 2) + dh, NSWidth(body), th);
+}
+
++ (NSRect)reviewTextRectIn:(NSRect)rect source:(NSString *)source before:(NSString *)before text:(NSString *)text
+                    detail:(BOOL)detail note:(BOOL)note meaningRow:(BOOL)meaningRow
+{
+    if ([text length] == 0) return NSZeroRect;
+    return RSReviewTextRect(RSReviewBody(rect, source, before, note, meaningRow, NULL), text, detail);
+}
+
++ (NSUInteger)reviewCharacterAt:(NSPoint)point in:(NSRect)rect source:(NSString *)source before:(NSString *)before
+                           text:(NSString *)text detail:(BOOL)detail note:(BOOL)note meaningRow:(BOOL)meaningRow
+{
+    NSRect tr = [self reviewTextRectIn:rect source:source before:before text:text detail:detail note:note meaningRow:meaningRow];
+    if (!NSPointInRect(point, NSInsetRect(tr, 0, -4))) return NSNotFound;
+    // Lay the line out as it's drawn (the same width and attributes), then
+    // ask which glyph is under the point, measured from the top.
+    NSTextStorage *storage = [[[NSTextStorage alloc] initWithString:text attributes:RSReviewLineText()] autorelease];
+    NSLayoutManager *layout = [[[NSLayoutManager alloc] init] autorelease];
+    NSTextContainer *container = [[[NSTextContainer alloc] initWithContainerSize:NSMakeSize(NSWidth(tr), 10000)] autorelease];
+    [container setLineFragmentPadding:0];
+    [layout addTextContainer:container];
+    [storage addLayoutManager:layout];
+    NSPoint at = NSMakePoint(point.x - NSMinX(tr), NSMaxY(tr) - point.y);
+    CGFloat fraction = 0;
+    NSUInteger glyph = [layout glyphIndexForPoint:at inTextContainer:container fractionOfDistanceThroughGlyph:&fraction];
+    if (glyph >= [layout numberOfGlyphs]) return NSNotFound;
+    NSRect box = [layout boundingRectForGlyphRange:NSMakeRange(glyph, 1) inTextContainer:container];
+    if (!NSPointInRect(at, NSInsetRect(box, -2, -3))) return NSNotFound;
+    return [layout characterIndexForGlyphAtIndex:glyph];
+}
+
 + (void)drawReviewIn:(NSRect)rect heading:(NSString *)heading source:(NSString *)source before:(NSString *)before
-                text:(NSString *)text word:(NSString *)word detail:(NSString *)detail prompt:(NSString *)prompt
-             message:(NSString *)message note:(NSString *)note meaningRow:(BOOL)meaningRow keys:(NSArray *)keys
+                text:(NSString *)text word:(NSString *)word wordRange:(NSRange)wordRange detail:(NSString *)detail
+              prompt:(NSString *)prompt message:(NSString *)message note:(NSString *)note meaningRow:(BOOL)meaningRow
+                keys:(NSArray *)keys
 {
     CGFloat bar = [self hintBarHeight];
     NSRect wall = rect;
@@ -1247,7 +1309,6 @@ static NSRect RSReviewCard(NSRect rect)
         RSDrawText(source, a, NSMakeRect(NSMinX(card) + pad, top - 16, width, 16));
         top -= 26;
     }
-    CGFloat bottom = NSMinY(card) + ([note length] ? 34 : 16) + (meaningRow ? 30 : 0);
     if (meaningRow) {
         // The rule the owner writes on.
         NSRect m = [self reviewMeaningRectIn:rect note:[note length] > 0];
@@ -1259,23 +1320,22 @@ static NSRect RSReviewCard(NSRect rect)
         NSString *one = [[before componentsSeparatedByString:@"\n"] componentsJoinedByString:@" "];
         CGFloat bh = MIN(36, RSHeightOf(one, b, width));
         RSDrawText(one, b, NSMakeRect(NSMinX(card) + pad, top - bh, width, bh));
-        top -= bh + 8;
     }
-    NSRect body = NSMakeRect(NSMinX(card) + pad, bottom, width, MAX(0, top - bottom));
+    NSRect body = RSReviewBody(rect, source, before, [note length] > 0, meaningRow, NULL);
     if ([prompt length]) {
         // The owner's words, in blue ink, to be said in Russian.
         NSDictionary *t = RSText(RSSerifItalic(24), RSRGB(0x1f3f8a, 1), NSCenterTextAlignment, NSLineBreakByWordWrapping);
         CGFloat th = MIN(NSHeight(body), RSHeightOf(prompt, t, width));
         RSDrawText(prompt, t, NSMakeRect(NSMinX(body), round(NSMidY(body) - th / 2), width, th));
     } else if ([text length]) {
-        NSDictionary *t = RSText(RSSerif(24), RSInk(), NSCenterTextAlignment, NSLineBreakByWordWrapping);
+        NSDictionary *t = RSReviewLineText();
         CGFloat dh = [detail length] ? 22 : 0;
-        CGFloat th = MIN(NSHeight(body) - dh, RSHeightOf(text, t, width));
-        NSRect tr = NSMakeRect(NSMinX(body), round(NSMidY(body) - (th + dh) / 2) + dh, width, th);
+        NSRect tr = RSReviewTextRect(body, text, dh > 0);
         if ([word length]) {
             // The word underlined in blue ink, as a reader marks a word to look up.
             NSMutableAttributedString *marked = [[[NSMutableAttributedString alloc] initWithString:text attributes:t] autorelease];
-            NSRange range = [text rangeOfString:word options:NSCaseInsensitiveSearch];
+            NSRange range = wordRange.location != NSNotFound && NSMaxRange(wordRange) <= [text length]
+                ? wordRange : [text rangeOfString:word options:NSCaseInsensitiveSearch];
             if (range.location != NSNotFound) {
                 [marked addAttribute:NSUnderlineStyleAttributeName value:[NSNumber numberWithInt:NSUnderlineStyleSingle] range:range];
                 [marked addAttribute:NSUnderlineColorAttributeName value:RSRGB(0x1f3f8a, 1) range:range];

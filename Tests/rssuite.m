@@ -889,6 +889,29 @@ static void TestLines(void)
           "today's not-yets: %lu", (unsigned long)[notYet count]);
     CHECK([[lines notYetOn:day + 2] count] == 0 || ![[lines notYetOn:day + 2] containsObject:f], "only today's");
 
+    // A word looked up (a hint), Duolingo's way: "knew it" doesn't climb, and
+    // the card is heard once more today, like a "not yet".
+    RSKeptLine *hh = [due objectAtIndex:5], *hk = [due objectAtIndex:6];
+    [hh setStep:2];
+    [hk setStep:2];
+    [lines answer:hh knew:YES hinted:YES today:day + 1];
+    [lines answer:hk knew:YES hinted:NO today:day + 1];
+    CHECK([hh step] == 2 && [hh due] == day + 1 + 7 && [hh hinted] == day + 1 && [hh knewLast] && [hh lapses] == 0,
+          "known with a hint: the same wait as last time (7 days), not longer: step %lu, due +%ld",
+          (unsigned long)[hh step], [hh due] - day - 1);
+    CHECK([hk step] == 3 && [hk due] == day + 1 + 16 && [hk hinted] == 0, "known without one: the next wait (16 days)");
+    notYet = [lines notYetOn:day + 1];
+    CHECK([notYet containsObject:hh] && ![notYet containsObject:hk], "the hinted card is heard once more today");
+    CHECK(![[lines notYetOn:day + 2] containsObject:hh], "and only today");
+    RSKeptLine *hn = [due objectAtIndex:7];
+    [lines answer:hn knew:NO hinted:YES today:day + 1];
+    CHECK([hn step] == 0 && [hn due] == day + 2 && [hn lapses] == 1, "not yet with a hint is a not yet");
+    [hh setStep:0];
+    [lines answer:hh knew:YES hinted:YES today:day + 1];
+    CHECK([hh due] == day + 2 && [hh step] == 0, "a new card known with a hint: back tomorrow");
+    [hh setStep:2];
+    [hh setDue:day + 8];
+
     // Saved and read back, the same.
     CHECK([lines save], "saved");
     struct stat ls1, ls2;
@@ -898,13 +921,19 @@ static void TestLines(void)
           "saved again with nothing new: Lines.plist left alone");
     RSLines *read = [[[RSLines alloc] initWithFolder:folder] autorelease];
     CHECK([[read lines] count] == RSKeepPerDay + 1, "read back: %lu", (unsigned long)[[read lines] count]);
+    {
+        RSKeptLine *rh = nil;
+        for (RSKeptLine *l in [read lines]) if ([[l key] isEqualToString:[hh key]]) rh = l;
+        CHECK(rh && [rh hinted] == day + 1 && [[read notYetOn:day + 1] containsObject:rh], "a hint reads back, and still counts today");
+    }
     RSKeptLine *a2 = [[read lines] objectAtIndex:0], *c2 = [[read lines] objectAtIndex:1];
     CHECK([[a2 text] isEqualToString:@"Привет, друзья!"] && [[a2 before] isEqualToString:@"Сегодня"] && [[a2 title] isEqualToString:@"She Cut Her Hair"] &&
           fabs([a2 start] - 12.345) < 1e-9 && [a2 end] == 14.5 && [a2 putAway] && [a2 step] == 6 && [a2 kept] == day,
           "a line read back");
     CHECK([c2 lapses] == 6 && [c2 putAway] && [[[read lines] objectAtIndex:3] before] == nil, "another, and no context is nil");
     RSKeptLine *f2 = [[read lines] objectAtIndex:3];
-    CHECK([f2 heard] == day + 1 && ![f2 knewLast] && [[read notYetOn:day + 1] count] == 1, "the last answer read back");
+    CHECK([f2 heard] == day + 1 && ![f2 knewLast] && [[read notYetOn:day + 1] containsObject:f2] &&
+          [[read notYetOn:day + 1] count] == 3, "the last answer read back (and the two hinted and not-yet ones)");
 
     // Sixty a day, then the rest the next day; and no keeping while 45 wait.
     NSString *many = Temp(@"lines-many");

@@ -1071,6 +1071,7 @@ static NSString *RSTimeText(time_t t)
     if (_review == nil) {
         _review = [[RSReview alloc] initWithLines:_lines today:RSToday()];
         [_review setDelegate:self];
+        [_review setDictionary:_dictionary];        // nil: the bundled one
     }
     [_review show];
     return _review;

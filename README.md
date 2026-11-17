@@ -203,10 +203,24 @@ a time. When there are some, the desk card says how many.
 | − | Three-quarter speed, and full speed again |
 | ↓ | Show the line, and the one before it for context. On a word card, the word is underlined in its line, with its lemma and gloss under it |
 | Tab | **Write what it means**, in your own words, under the shown line. Return keeps it, Esc leaves it as it was |
+| Click | **A word of the shown line**: its lemma with the stress, its gloss and how common it is, under the line. A hint (below) |
 | ← | **Not yet.** Back tomorrow, from the start, and once more before today's are done |
 | → | **Knew it.** Back later |
 | ⌫ | Put it away for good |
 | Esc | Close |
+
+**A word looked up is a hint, and hints work as Duolingo's do** (2026-11-16, at
+the owner's word): Duolingo re-asks a word missed in a lesson before the lesson
+ends, and its spaced repetition (half-life regression, Settles & Meeder 2016)
+lengthens a word's wait only when it was recalled unaided. So the first word
+clicked on a card (not a word card's own word, whose gloss is already there):
+
+- sends the card round **once more before today's are done**, whatever the
+  answer, as a "not yet" does (also after the window is closed and opened);
+- makes "knew it" **half a knew-it**: the card comes back after the same wait
+  as last time, not the next longer one (a "not yet" is still a not yet);
+- **keeps the word as a word card of its own**, with its line and sound, from
+  tomorrow, within the day's fifteen and the forty-five waiting, as K is.
 
 Sound first, so it's the ear that's tested, not reading. A card kept today
 comes back tomorrow; each "knew it" waits longer: 3, 7, 16, 35, then 75

@@ -48,6 +48,7 @@ long RSLineGap(NSUInteger step)
         [NSNumber numberWithUnsignedInteger:_step], @"step", [NSNumber numberWithUnsignedInteger:_lapses], @"lapses",
         [NSNumber numberWithBool:_putAway], @"putAway",
         [NSNumber numberWithLong:_heard], @"heard", [NSNumber numberWithBool:_knewLast], @"knewLast", nil];
+    if (_hinted) [d setObject:[NSNumber numberWithLong:_hinted] forKey:@"hinted"];
     if (_before) [d setObject:_before forKey:@"before"];
     if ([_meaning length]) [d setObject:_meaning forKey:@"meaning"];
     if ([self isWord]) {
@@ -89,6 +90,7 @@ long RSLineGap(NSUInteger step)
     [line setPutAway:[[d objectForKey:@"putAway"] boolValue]];
     [line setHeard:[[d objectForKey:@"heard"] longValue]];
     [line setKnewLast:[[d objectForKey:@"knewLast"] boolValue]];
+    [line setHinted:[[d objectForKey:@"hinted"] longValue]];
     return line;
 }
 
@@ -290,12 +292,21 @@ static NSString *RSWordKey(NSString *video, double start, NSString *word)
 
 - (void)answer:(RSKeptLine *)line knew:(BOOL)knew today:(long)today
 {
+    [self answer:line knew:knew hinted:NO today:today];
+}
+
+- (void)answer:(RSKeptLine *)line knew:(BOOL)knew hinted:(BOOL)hinted today:(long)today
+{
     if (line == nil || ![_lines containsObject:line]) return;
     if (_heardDay != today) { _heardDay = today; _heardCount = 0; }
     _heardCount++;
     [line setHeard:today];
     [line setKnewLast:knew];
-    if (knew) {
+    if (hinted) [line setHinted:today];
+    if (knew && hinted) {
+        // Known with help: the same wait as last time, not a longer one.
+        [line setDue:today + MAX(1, RSLineGap([line step]))];
+    } else if (knew) {
         [line setStep:[line step] + 1];
         long gap = RSLineGap([line step]);
         if (gap == 0) [line setPutAway:YES];
@@ -312,7 +323,7 @@ static NSString *RSWordKey(NSString *video, double start, NSString *word)
 {
     NSMutableArray *found = [NSMutableArray array];
     for (RSKeptLine *line in _lines)
-        if ([line heard] == today && ![line knewLast] && ![line putAway]) [found addObject:line];
+        if ([line heard] == today && (![line knewLast] || [line hinted] == today) && ![line putAway]) [found addObject:line];
     return found;
 }
 

@@ -14,13 +14,20 @@
 //   →        knew it: it comes back later (RSLines says when)
 //   ⌫        put it away for good
 //   Esc      close
+//   click    a word in the shown line: its meaning, from the dictionary
+//
+// A word looked up is a hint, and hints work as Duolingo's do: the card
+// comes round once more before today's are done, a "knew it" after a hint
+// doesn't lengthen its wait (RSLines answer:knew:hinted:today:), and the
+// word itself is kept as a word card of its own, from tomorrow (within the
+// day's keeping, as K is).
 //
 // Nothing is counted or scored on screen; when today's are done it says so
 // and stops.
 
 #import <Cocoa/Cocoa.h>
 
-@class RSLines, RSReview;
+@class RSLines, RSReview, RSDictionary;
 
 @protocol RSReviewDelegate <NSObject>
 - (void)reviewClosed:(RSReview *)review;
@@ -43,6 +50,8 @@ typedef enum {
 @property (nonatomic, readonly) RSReviewState state;
 @property (nonatomic, readonly) BOOL slower;
 @property (nonatomic, readonly) long today;
+@property (nonatomic, retain) RSDictionary *dictionary;     // nil: the bundled one
+@property (nonatomic, readonly) BOOL hinted;                // a word on the card up now was looked up
 
 - (void)show;
 - (void)close;
@@ -53,6 +62,10 @@ typedef enum {
 - (void)putAway;
 - (void)toggleSlower;
 - (void)setMeaning:(NSString *)meaning;     // for the line up now (and saved)
+// Looks up the word under a point in the view (a click), or a word of the
+// shown line by its text (the tests). NO if there's no word there.
+- (BOOL)lookUpWordAt:(NSPoint)point;
+- (BOOL)lookUpWord:(NSString *)word;
 
 // For the screenshots and tests: no sound played.
 - (void)setSilentForTesting;

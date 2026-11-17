@@ -98,6 +98,13 @@ media-subscriptions-prefpane. Never push it anywhere public.
 
 ## Still untested on the real Mac Pro
 
+- 2026-11-16 (branch cards-hints): in Cards, a click on a word of the shown line
+  looks it up (RSStyle's `reviewCharacterAt:` lays the line out as it's drawn) and
+  counts as a hint, Duolingo's way (`RSLines answer:knew:hinted:today:`, README
+  "Cards"). Tested in the suite and shots and installed on the MacBook; nobody has
+  clicked it on either Mac yet. Two clip-cut checks in the suite and two shelf
+  redraw checks in the shots fail on macOS 27 with or without this change.
+
 - 2026-11-02 (the overhaul, branch overhaul: speed ladder, sealed subtitles and sentence
   units, Reading, Say rounds and recordings): tests (`make SDK=/ test`) and shots only;
   nobody has pressed − = C ⌘D R N on the real Mac, read aloud into the microphone, or

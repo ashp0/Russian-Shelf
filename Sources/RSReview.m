@@ -2,6 +2,8 @@
 #import "RSLines.h"
 #import "RSStyle.h"
 #import "RSReport.h"
+#import "RSDictionary.h"
+#import "RSReading.h"
 
 #import <AVFoundation/AVFoundation.h>
 
@@ -14,6 +16,7 @@ static const float RSReviewSlowerRate = 0.75;
 - (BOOL)editingMeaning;
 - (void)cancelMeaning;
 - (void)drawIn:(NSRect)rect;
+- (NSRect)lineRect;
 @end
 
 // ---- The window: keys come to the review first ------------------------------
@@ -52,6 +55,19 @@ static const float RSReviewSlowerRate = 0.75;
 - (BOOL)acceptsFirstResponder { return YES; }      // so the keys come back here after writing
 - (void)drawRect:(NSRect)dirty { [_owner drawIn:[self bounds]]; }
 
+- (void)mouseDown:(NSEvent *)event
+{
+    [[self window] makeFirstResponder:self];
+    [_owner lookUpWordAt:[self convertPoint:[event locationInWindow] fromView:nil]];
+}
+
+// A hand over the shown line: its words can be clicked.
+- (void)resetCursorRects
+{
+    NSRect r = [_owner lineRect];
+    if (!NSIsEmptyRect(r)) [self addCursorRect:r cursor:[NSCursor pointingHandCursor]];
+}
+
 @end
 
 // ---- The review -------------------------------------------------------------
@@ -68,7 +84,11 @@ static const float RSReviewSlowerRate = 0.75;
     AVAudioPlayer *_sound;
     NSString *_note;
     BOOL _silent, _closed;
+    // A word looked up on the card up now.
+    NSString *_hintWord, *_hintDetail;
+    NSRange _hintRange;
 }
+@property (nonatomic, readwrite) BOOL hinted;
 @property (nonatomic, readwrite) RSReviewState state;
 @property (nonatomic, readwrite) BOOL slower;
 @end
@@ -130,6 +150,9 @@ static const float RSReviewSlowerRate = 0.75;
     [_sound stop];
     [_sound release];
     [_note release];
+    [_hintWord release];
+    [_hintDetail release];
+    [_dictionary release];
     [super dealloc];
 }
 
@@ -226,6 +249,130 @@ static const float RSReviewSlowerRate = 0.75;
 {
     [_note release];
     _note = [note copy];
+    [_window invalidateCursorRectsForView:_view];
+}
+
+// ---- A word looked up: a hint ------------------------------------------------
+
+- (void)clearHint
+{
+    [_hintWord release];
+    _hintWord = nil;
+    [_hintDetail release];
+    _hintDetail = nil;
+    _hintRange = NSMakeRange(NSNotFound, 0);
+}
+
+- (RSDictionary *)dictionaryNow
+{
+    return _dictionary ?: [RSDictionary bundled];
+}
+
+- (NSString *)sourceNow
+{
+    if ([[_line title] length] == 0) return nil;
+    return RSIsReadingKey([_line video]) ? [NSString stringWithFormat:@"From the reading “%@”", [_line title]]
+                                         : [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
+}
+
+// What's underlined in the shown line, and what's written under it: the
+// word looked up, else a word card's own word.
+- (NSString *)markNow
+{
+    if (_state != RSReviewShown) return nil;
+    return _hintWord ?: ([_line isWord] ? [_line word] : nil);
+}
+
+- (NSString *)detailNow
+{
+    if (_state != RSReviewShown) return nil;
+    if (_hintWord) return _hintDetail;
+    if ([_line isWord]) return [NSString stringWithFormat:@"%@ · %@", [_line lemma] ?: [_line word], [_line gloss] ?: @""];
+    return @"Click a word for its meaning.";
+}
+
+- (NSRect)lineRect
+{
+    if (_state != RSReviewShown || _line == nil) return NSZeroRect;
+    return [RSStyle reviewTextRectIn:[_view bounds] source:[self sourceNow] before:[_line before] text:[_line text]
+                              detail:[[self detailNow] length] > 0 note:[_note length] > 0 meaningRow:YES];
+}
+
+static BOOL RSIsWordCharacter(unichar c)
+{
+    return [[NSCharacterSet letterCharacterSet] characterIsMember:c];
+}
+
+- (BOOL)lookUpWordAt:(NSPoint)point
+{
+    if (_state != RSReviewShown || _line == nil) return NO;
+    NSString *text = [_line text];
+    NSUInteger i = [RSStyle reviewCharacterAt:point in:[_view bounds] source:[self sourceNow] before:[_line before] text:text
+                                       detail:[[self detailNow] length] > 0 note:[_note length] > 0 meaningRow:YES];
+    if (i == NSNotFound || i >= [text length] || !RSIsWordCharacter([text characterAtIndex:i])) return NO;
+    // The whole word: letters (the stress mark is one) and a hyphen between them ("кто-то").
+    NSUInteger start = i, end = i + 1, n = [text length];
+    while (start > 0 && (RSIsWordCharacter([text characterAtIndex:start - 1]) ||
+                         ([text characterAtIndex:start - 1] == '-' && start > 1 && RSIsWordCharacter([text characterAtIndex:start - 2]))))
+        start--;
+    while (end < n && (RSIsWordCharacter([text characterAtIndex:end]) ||
+                       ([text characterAtIndex:end] == '-' && end + 1 < n && RSIsWordCharacter([text characterAtIndex:end + 1]))))
+        end++;
+    return [self lookUpRange:NSMakeRange(start, end - start)];
+}
+
+- (BOOL)lookUpWord:(NSString *)word
+{
+    if (_state != RSReviewShown || _line == nil || [word length] == 0) return NO;
+    NSRange r = [[_line text] rangeOfString:word options:NSCaseInsensitiveSearch];
+    return r.location != NSNotFound && [self lookUpRange:r];
+}
+
+- (BOOL)lookUpRange:(NSRange)range
+{
+    NSString *word = [[_line text] substringWithRange:range];
+    if ([RSWordsInLine(word) count] == 0) return NO;             // not Russian
+    NSString *bare = RSWithoutStress(word);
+    [self clearHint];
+    _hintWord = [word copy];
+    _hintRange = range;
+    // A word card's own word: its gloss is on the card already; not a hint.
+    if ([_line isWord] && [[[_line word] lowercaseString] isEqualToString:[bare lowercaseString]]) {
+        _hintDetail = [[NSString stringWithFormat:@"%@ · %@", [_line lemma] ?: [_line word], [_line gloss] ?: @""] copy];
+        [self setNote:nil];
+        [self refreshAfterHint];
+        return YES;
+    }
+    RSDictionary *dictionary = [self dictionaryNow];
+    RSDictionaryEntry *entry = [dictionary lookup:bare];
+    if (entry == nil) {
+        _hintDetail = [(dictionary ? @"Not in the dictionary." : @"No dictionary in this build.") copy];
+        [self refreshAfterHint];
+        return YES;
+    }
+    NSString *lemma = [[entry accented] length] ? [entry accented] : [entry bare];
+    _hintDetail = [[NSString stringWithFormat:@"%@ · %@ · %@", lemma, [entry gloss] ?: @"", [entry rankText]] copy];
+    if (!_hinted) {
+        // The first word looked up on this card: it was a hint.
+        [self setHinted:YES];
+        [_line setHinted:_today];
+        NSString *why = nil;
+        RSKeptLine *card = [_lines keepWord:bare lemma:lemma gloss:[entry gloss] rank:[entry rank] inLine:[_line text]
+                                     before:[_line before] video:[_line video] title:[_line title]
+                                      start:[_line start] end:[_line end] today:_today problem:&why];
+        [_lines save];
+        [self setNote:card ? @"Looked up: once more before today’s are done, and the word gets its own card."
+                           : @"Looked up: this card comes round once more before today’s are done."];
+    }
+    [self refreshAfterHint];
+    return YES;
+}
+
+- (void)refreshAfterHint
+{
+    [self placeMeaningField];
+    [_window invalidateCursorRectsForView:_view];
+    [_view setNeedsDisplay:YES];
 }
 
 // ---- Going through them -----------------------------------------------------
@@ -236,6 +383,8 @@ static const float RSReviewSlowerRate = 0.75;
     [_sound release];
     _sound = nil;
     [self setNote:nil];
+    [self clearHint];
+    [self setHinted:NO];
     [_line release];
     _line = nil;
     if ([_queue count] == 0) {
@@ -261,6 +410,7 @@ static const float RSReviewSlowerRate = 0.75;
     }
     [self placeMeaningField];
     [_view setNeedsDisplay:YES];
+    [_window invalidateCursorRectsForView:_view];
     // A "say it" card waits for the owner to speak first.
     if (!say && _window && [_window isVisible]) [self hearAgain];
 }
@@ -287,6 +437,7 @@ static const float RSReviewSlowerRate = 0.75;
     [self setState:RSReviewShown];
     [self placeMeaningField];
     [_view setNeedsDisplay:YES];
+    [_window invalidateCursorRectsForView:_view];
     if (said) [self playSound];         // now hear how the speaker says it
 }
 
@@ -296,8 +447,9 @@ static const float RSReviewSlowerRate = 0.75;
     // The first answer today moves it on; a line sent round again is only
     // heard once more.
     if (![_again containsObject:[_line key]]) {
-        [_lines answer:_line knew:knew today:_today];
-        if (!knew && ![_line putAway]) {
+        [_lines answer:_line knew:knew hinted:_hinted today:_today];
+        // Not yet, or known only with a word looked up: once more today.
+        if ((!knew || _hinted) && ![_line putAway]) {
             [_again addObject:[_line key]];
             [_queue addObject:_line];
         }
@@ -348,19 +500,14 @@ static const float RSReviewSlowerRate = 0.75;
     NSString *heading = nil, *source = nil, *before = nil, *text = nil, *prompt = nil, *message = nil;
     NSArray *keys = nil;
     BOOL word = [_line isWord];
-    NSString *mark = nil, *detail = nil;
-    if (word && _state == RSReviewShown) {
-        mark = [_line word];
-        detail = [NSString stringWithFormat:@"%@ · %@", [_line lemma] ?: [_line word], [_line gloss] ?: @""];
-    }
+    NSString *mark = [self markNow], *detail = [self detailNow];
+    NSRange markRange = _hintWord ? _hintRange : NSMakeRange(NSNotFound, 0);
     switch (_state) {
         case RSReviewListening:
         case RSReviewShown:
             heading = _state == RSReviewListening ? (word ? @"Listen. Which word was it, and what does it mean?" : @"Listen. What does it say?")
                                                   : (word ? @"The word, in its line. Say the line aloud." : @"Now say it aloud.");
-            if ([[_line title] length])
-                source = RSIsReadingKey([_line video]) ? [NSString stringWithFormat:@"From the reading “%@”", [_line title]]
-                                                       : [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
+            source = [self sourceNow];
             if (_state == RSReviewShown) {
                 before = [_line before];
                 text = [_line text];
@@ -371,9 +518,7 @@ static const float RSReviewSlowerRate = 0.75;
             break;
         case RSReviewSaying:
             heading = word ? @"Say the word in Russian, then the line." : @"Say it in Russian.";
-            if ([[_line title] length])
-                source = RSIsReadingKey([_line video]) ? [NSString stringWithFormat:@"From the reading “%@”", [_line title]]
-                                                       : [NSString stringWithFormat:@"From “%@”, at %@", [_line title], RSClock([_line start])];
+            source = [self sourceNow];
             prompt = [_line meaning];
             keys = [NSArray arrayWithObjects:@"↓", @"Hear it and see it", @"←", @"Not yet", @"→", @"Knew it",
                     @"⌫", @"Put away", nil];
@@ -395,8 +540,8 @@ static const float RSReviewSlowerRate = 0.75;
         [items addObject:[keys objectAtIndex:i]];
         [items addObject:[keys objectAtIndex:i + 1]];
     }
-    [RSStyle drawReviewIn:rect heading:heading source:source before:before text:text word:mark detail:detail prompt:prompt
-                  message:message note:_note meaningRow:_state == RSReviewShown keys:items];
+    [RSStyle drawReviewIn:rect heading:heading source:source before:before text:text word:mark wordRange:markRange
+                   detail:detail prompt:prompt message:message note:_note meaningRow:_state == RSReviewShown keys:items];
 }
 
 @end

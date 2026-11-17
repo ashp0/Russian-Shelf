@@ -53,6 +53,7 @@ extern NSString *const RSCardLine, *const RSCardWord;
 @property (nonatomic) BOOL putAway;                     // known, or not for now
 @property (nonatomic) long heard;                       // the day of the last answer (0: never)
 @property (nonatomic) BOOL knewLast;                    // what that answer was
+@property (nonatomic) long hinted;                      // the last day a word in it was looked up in Cards (0: never)
 @end
 
 @interface RSLines : NSObject
@@ -82,11 +83,17 @@ extern NSString *const RSCardLine, *const RSCardWord;
 // Whether this time it's "say it from your words" rather than "listen": only
 // for a line with a meaning, every other time after the first "knew it".
 - (BOOL)asksToSay:(RSKeptLine *)line;
-// Lines answered "not yet" today and not put away: heard once more before
-// today's are done (not counted again, not moved again).
+// Lines answered "not yet" today, or answered after a word in them was
+// looked up, and not put away: heard once more before today's are done (not
+// counted again, not moved again).
 - (NSArray *)notYetOn:(long)today;
-// "Knew it" (YES) or "not yet" (NO). Counts towards today's thirty.
+// "Knew it" (YES) or "not yet" (NO). Counts towards today's sixty.
 - (void)answer:(RSKeptLine *)line knew:(BOOL)knew today:(long)today;
+// The same, after a word in it was looked up (`hinted`), Duolingo's way: a
+// hint makes "knew it" only half a knew-it. The card doesn't climb (it comes
+// back after the same wait as last time, never longer), and like a "not yet"
+// it is heard once more before today's are done (notYetOn:).
+- (void)answer:(RSKeptLine *)line knew:(BOOL)knew hinted:(BOOL)hinted today:(long)today;
 // Put a line away by hand.
 - (void)putAway:(RSKeptLine *)line;
 

@@ -129,11 +129,19 @@ typedef enum {
 // nil: the line is still hidden. `prompt`: the owner's own words, to say in
 // Russian (then `text` is nil). `message` is for when there's no line up.
 // `meaningRow`: leave room at the card's foot for the meaning field.
-// `word`: a word card: that word is underlined in `text`, and `detail` (its
-// lemma, kind and gloss) is written under the line.
+// `word`: a word card, or a word clicked to look up: that word is underlined
+// in `text` (at `wordRange` when it has a location, else where it first
+// stands), and `detail` (its lemma and gloss) is written under the line.
 + (void)drawReviewIn:(NSRect)rect heading:(NSString *)heading source:(NSString *)source before:(NSString *)before
-                text:(NSString *)text word:(NSString *)word detail:(NSString *)detail prompt:(NSString *)prompt
-             message:(NSString *)message note:(NSString *)note meaningRow:(BOOL)meaningRow keys:(NSArray *)keys;
+                text:(NSString *)text word:(NSString *)word wordRange:(NSRange)wordRange detail:(NSString *)detail
+              prompt:(NSString *)prompt message:(NSString *)message note:(NSString *)note meaningRow:(BOOL)meaningRow
+                keys:(NSArray *)keys;
+// Where the shown line is drawn on the card, and which of its characters is
+// under a point (NSNotFound: none), so a click can look a word up.
++ (NSRect)reviewTextRectIn:(NSRect)rect source:(NSString *)source before:(NSString *)before text:(NSString *)text
+                    detail:(BOOL)detail note:(BOOL)note meaningRow:(BOOL)meaningRow;
++ (NSUInteger)reviewCharacterAt:(NSPoint)point in:(NSRect)rect source:(NSString *)source before:(NSString *)before
+                           text:(NSString *)text detail:(BOOL)detail note:(BOOL)note meaningRow:(BOOL)meaningRow;
 // Where the meaning field goes on the card, and how it looks.
 + (NSRect)reviewMeaningRectIn:(NSRect)rect note:(BOOL)note;
 + (void)styleMeaningField:(NSTextField *)field;

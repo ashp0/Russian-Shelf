@@ -26,6 +26,7 @@
 #import "RSDate.h"
 #import "RSClip.h"
 #import "RSDictionary.h"
+#import "RSReport.h"
 #import "RSSay.h"
 #import "RSSayWindow.h"
 #import "RSReading.h"
@@ -502,6 +503,48 @@ int main(int argc, const char *argv[])
         [wordReview showLine];
         ShootBoth([wordReview window], out, @"lines-word");
         [wordReview close];
+
+        // A word clicked on a shown card: its meaning under the line. It was a
+        // hint: the card comes round once more today, a "knew it" doesn't
+        // climb, and the word is kept as its own card.
+        [first setStep:2];
+        [first setDue:RSToday()];
+        [wordCard setDue:RSToday() + 3];
+        [lines save];
+        RSReview *hint = [[[RSReview alloc] initWithLines:lines today:RSToday()] autorelease];
+        [hint setDictionary:[c dictionary]];
+        [hint setSilentForTesting];
+        [[hint window] orderOut:nil];
+        [hint showLine];
+        NSView *hintView = nil;
+        for (NSView *v in [[[hint window] contentView] subviews]) if ([NSStringFromClass([v class]) isEqualToString:@"RSReviewView"]) hintView = v;
+        // Find a point on "Она" the way a click would land on it.
+        NSString *hintText = [first text];
+        NSRange target = [hintText rangeOfString:@"Она"];
+        NSRect lineRect = [RSStyle reviewTextRectIn:[hintView bounds] source:[NSString stringWithFormat:@"From “%@”, at %@", [first title], RSClock([first start])]
+                                             before:[first before] text:hintText detail:YES note:NO meaningRow:YES];
+        NSPoint onWord = NSZeroPoint;
+        BOOL found = NO;
+        for (CGFloat y = NSMaxY(lineRect) - 4; y > NSMinY(lineRect) && !found; y -= 3)
+            for (CGFloat x = NSMinX(lineRect); x < NSMaxX(lineRect) && !found; x += 3) {
+                NSUInteger i = [RSStyle reviewCharacterAt:NSMakePoint(x, y) in:[hintView bounds]
+                                                   source:[NSString stringWithFormat:@"From “%@”, at %@", [first title], RSClock([first start])]
+                                                   before:[first before] text:hintText detail:YES note:NO meaningRow:YES];
+                if (i != NSNotFound && NSLocationInRange(i, target)) { onWord = NSMakePoint(x, y); found = YES; }
+            }
+        NSUInteger cardsBefore = [[lines lines] count];
+        Check(found && [hint lookUpWordAt:onWord] && [hint hinted], @"a click on a word of the shown line looks it up");
+        Check(![hint lookUpWordAt:NSMakePoint(NSMinX([hintView bounds]) + 5, NSMinY([hintView bounds]) + 5)], @"a click off the line looks nothing up");
+        Check([[lines lines] count] == cardsBefore + 1 && [lines isKeptWord:@"она" video:[first video] start:[first start]],
+              @"the word looked up is kept as its own card");
+        ShootBoth([hint window], out, @"lines-hint");
+        [hint answer:YES];
+        Check([first step] == 2 && [first due] == RSToday() + 7, @"knew it after a hint: the same wait, not longer");
+        Check([hint state] != RSReviewDone && [[hint visibleText] length] == 0 && [hint state] == RSReviewListening,
+              @"the hinted card comes round once more");
+        [hint answer:YES];
+        Check([hint state] == RSReviewDone && [first due] == RSToday() + 7, @"then today's are done, and it isn't moved again");
+        [hint close];
         [c reloadRows];
         ShootBoth([c window], out, @"shelf-after-lines");
 
